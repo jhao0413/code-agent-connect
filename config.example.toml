@@ -1,0 +1,32 @@
+[telegram]
+bot_token = "123456:replace-me"
+allowed_user_ids = ["123456789"]
+
+[bridge]
+default_agent = "claude"
+working_dir = "/home/jhao/Projects"
+reply_chunk_chars = 500
+reply_flush_ms = 1500
+poll_timeout_seconds = 30
+
+[network]
+proxy_url = ""
+no_proxy = ""
+
+[agents]
+enabled = ["claude", "codex", "neovate"]
+
+[agents.claude]
+bin = "/home/jhao/.local/bin/claude"
+model = ""
+extra_args = []
+
+[agents.codex]
+bin = "/home/jhao/.nvm/versions/node/v24.6.0/bin/codex"
+model = ""
+extra_args = []
+
+[agents.neovate]
+bin = "/home/jhao/.nvm/versions/node/v24.6.0/bin/neovate"
+model = ""
+extra_args = []

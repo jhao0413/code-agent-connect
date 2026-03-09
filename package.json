@@ -1,0 +1,16 @@
+{
+  "name": "code-agent-connect",
+  "version": "0.1.0",
+  "description": "A minimal Telegram bridge for local Claude, Codex, and Neovate CLIs",
+  "type": "module",
+  "bin": {
+    "code-agent-connect": "./dist/cli.mjs"
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
