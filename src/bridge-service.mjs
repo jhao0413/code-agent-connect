@@ -1,9 +1,46 @@
+import fs from 'node:fs/promises';
+import path from 'node:path';
 import { streamAgentTurn } from './providers.mjs';
 import { TelegramClient } from './telegram-client.mjs';
-import { chunkText, sleep, toErrorMessage } from './utils.mjs';
+import { chunkText, expandHomePath, sleep, toErrorMessage } from './utils.mjs';
 
 function stripBotSuffix(command) {
   return command.replace(/@.+$/u, '');
+}
+
+function parseCommandText(text) {
+  const match = text.trim().match(/^(\S+)(?:\s+([\s\S]*))?$/u);
+  return {
+    rawCommand: match?.[1] || text.trim(),
+    rawArgs: match?.[2] || '',
+  };
+}
+
+function unwrapQuotedArg(value) {
+  const trimmed = value.trim();
+  if (trimmed.length >= 2) {
+    const quote = trimmed[0];
+    if ((quote === '"' || quote === '\'') && trimmed.at(-1) === quote) {
+      return trimmed.slice(1, -1);
+    }
+  }
+  return trimmed;
+}
+
+function normalizeSessionState(session) {
+  session.providerSessionIds = {
+    claude: null,
+    codex: null,
+    neovate: null,
+    ...(session.providerSessionIds || {}),
+  };
+  session.providerWorkingDirs = {
+    claude: null,
+    codex: null,
+    neovate: null,
+    ...(session.providerWorkingDirs || {}),
+  };
+  return session;
 }
 
 function buildHelpText(config) {
@@ -15,6 +52,7 @@ function buildHelpText(config) {
     '/help - Show help',
     '/new - Start a fresh logical session',
     `/use <${config.agents.enabled.join('|')}> - Switch active agent`,
+    '/set_working_dir <path> - Set the session working directory',
     '/status - Show the current session state',
     '',
     'Any other private message is forwarded to the active agent.',
@@ -40,6 +78,10 @@ export function buildTelegramCommands(config) {
       description: `Switch agent: ${config.agents.enabled.join('|')}`,
     },
     {
+      command: 'set_working_dir',
+      description: 'Set the session working directory',
+    },
+    {
       command: 'status',
       description: 'Show current session and active agent',
     },
@@ -62,6 +104,43 @@ export class BridgeService {
     for (const chunk of chunkText(text, 3500)) {
       await this.telegram.sendMessage(chatId, chunk);
     }
+  }
+
+  getSessionWorkingDir(session) {
+    return session.workingDir || this.config.bridge.workingDir;
+  }
+
+  async preparePromptSession(session, agent) {
+    const workingDir = this.getSessionWorkingDir(session);
+    const providerWorkingDir = session.providerWorkingDirs[agent];
+    let upstreamSessionId = session.providerSessionIds[agent];
+
+    if (upstreamSessionId && providerWorkingDir && providerWorkingDir !== workingDir) {
+      session.providerSessionIds[agent] = null;
+      session.providerWorkingDirs[agent] = null;
+      session = await this.store.saveSession(session);
+      upstreamSessionId = null;
+    }
+
+    return {
+      session,
+      workingDir,
+      upstreamSessionId,
+    };
+  }
+
+  async resolveWorkingDir(session, rawPath) {
+    const baseDir = this.getSessionWorkingDir(session);
+    const expanded = expandHomePath(rawPath);
+    const candidate = path.isAbsolute(expanded)
+      ? expanded
+      : path.resolve(baseDir, expanded);
+    const resolved = path.resolve(candidate);
+    const stats = await fs.stat(resolved);
+    if (!stats.isDirectory()) {
+      throw new Error(`${resolved} is not a directory`);
+    }
+    return resolved;
   }
 
   async run() {
@@ -122,7 +201,11 @@ export class BridgeService {
       return;
     }
 
-    const session = await this.store.ensureActiveSession(userId, this.config.bridge.defaultAgent);
+    const session = await this.store.ensureActiveSession(
+      userId,
+      this.config.bridge.defaultAgent,
+      this.config.bridge.workingDir,
+    );
 
     if (text.startsWith('/')) {
       await this.handleCommand(chatId, userId, session, text);
@@ -133,7 +216,8 @@ export class BridgeService {
   }
 
   async handleCommand(chatId, userId, session, text) {
-    const [rawCommand, ...args] = text.split(/\s+/u);
+    normalizeSessionState(session);
+    const { rawCommand, rawArgs } = parseCommandText(text);
     const command = stripBotSuffix(rawCommand);
 
     if (command === '/start' || command === '/help') {
@@ -142,19 +226,61 @@ export class BridgeService {
     }
 
     if (command === '/new') {
-      const nextSession = await this.store.replaceActiveSession(userId, session.activeAgent);
-      await this.sendText(chatId, `Started a new session.\nSession: ${nextSession.id}\nAgent: ${nextSession.activeAgent}`);
+      const nextSession = await this.store.replaceActiveSession(
+        userId,
+        session.activeAgent,
+        this.getSessionWorkingDir(session),
+      );
+      await this.sendText(
+        chatId,
+        [
+          'Started a new session.',
+          `Session: ${nextSession.id}`,
+          `Agent: ${nextSession.activeAgent}`,
+          `Working dir: ${this.getSessionWorkingDir(nextSession)}`,
+        ].join('\n'),
+      );
       return;
     }
 
     if (command === '/use') {
-      const nextAgent = args[0];
+      const nextAgent = rawArgs.trim().split(/\s+/u)[0];
       if (!nextAgent || !this.config.agents.enabled.includes(nextAgent)) {
         await this.sendText(chatId, `Usage: /use <${this.config.agents.enabled.join('|')}>`);
         return;
       }
       const nextSession = await this.store.setActiveAgent(userId, nextAgent);
       await this.sendText(chatId, `Active agent: ${nextSession.activeAgent}`);
+      return;
+    }
+
+    if (command === '/set_working_dir' || command === '/cd') {
+      const requestedPath = unwrapQuotedArg(rawArgs);
+      if (!requestedPath) {
+        await this.sendText(chatId, 'Usage: /set_working_dir <path>');
+        return;
+      }
+
+      try {
+        const workingDir = await this.resolveWorkingDir(session, requestedPath);
+        const resetCurrentAgent = this.getSessionWorkingDir(session) !== workingDir;
+        const nextSession = await this.store.setWorkingDir(userId, session.activeAgent, workingDir);
+        const details = [
+          'Updated session working directory.',
+          `Session: ${nextSession.id}`,
+          `Working dir: ${this.getSessionWorkingDir(nextSession)}`,
+        ];
+        if (resetCurrentAgent) {
+          details.push(`Current ${session.activeAgent} session: reset`);
+        }
+        await this.sendText(
+          chatId,
+          details.join('\n'),
+        );
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        await this.sendText(chatId, `Failed to set working directory: ${message}`);
+      }
       return;
     }
 
@@ -165,7 +291,7 @@ export class BridgeService {
         [
           `Session: ${session.id}`,
           `Agent: ${session.activeAgent}`,
-          `Working dir: ${this.config.bridge.workingDir}`,
+          `Working dir: ${this.getSessionWorkingDir(session)}`,
           `Provider session: ${providerSessionId}`,
         ].join('\n'),
       );
@@ -176,6 +302,7 @@ export class BridgeService {
   }
 
   async handlePrompt(chatId, session, prompt) {
+    normalizeSessionState(session);
     await this.store.appendTranscript(session.id, {
       direction: 'in',
       agent: session.activeAgent,
@@ -183,6 +310,8 @@ export class BridgeService {
     });
 
     const agent = session.activeAgent;
+    const prepared = await this.preparePromptSession(session, agent);
+    session = prepared.session;
     let aggregateText = '';
     let finalText = '';
     let sentLength = 0;
@@ -243,11 +372,12 @@ export class BridgeService {
         config: this.config,
         agent,
         prompt,
-        workingDir: this.config.bridge.workingDir,
-        upstreamSessionId: session.providerSessionIds[agent],
+        workingDir: prepared.workingDir,
+        upstreamSessionId: prepared.upstreamSessionId,
       })) {
         if (event.type === 'session_started' && event.sessionId) {
           session.providerSessionIds[agent] = event.sessionId;
+          session.providerWorkingDirs[agent] = prepared.workingDir;
           await this.store.saveSession(session);
         }
 

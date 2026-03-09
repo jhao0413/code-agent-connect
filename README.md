@@ -59,10 +59,13 @@ node dist/cli.mjs service install
 - `/start`
 - `/help`
 - `/new`
+- `/set_working_dir /path/to/project`
 - `/use claude|codex|neovate`
 - `/status`
 
 Any other private text message is sent to the active agent.
+
+Each Telegram logical session keeps its own working directory. `/set_working_dir` updates that directory for the current session and resets the active agent session when the directory changes, so subsequent turns run from the new location. The command accepts absolute paths, `~/...`, and relative paths; relative paths are resolved from the current session working directory.
 
 ## Keeping It Running
 

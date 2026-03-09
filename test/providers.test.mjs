@@ -92,6 +92,12 @@ test('buildCommandSpec uses configured binaries and correct flags', () => {
   const codex = buildCommandSpec(config, 'codex', 'prompt', '/tmp/work', 'session-2');
   assert.equal(codex.command, '/bin/codex');
   assert.deepEqual(codex.args.slice(0, 3), ['exec', 'resume', 'session-2']);
+  assert.equal(codex.cwd, '/tmp/work');
+  assert.equal(codex.args.includes('--cd'), false);
+
+  const freshCodex = buildCommandSpec(config, 'codex', 'prompt', '/tmp/work', null);
+  assert.deepEqual(freshCodex.args.slice(0, 4), ['exec', '--json', '--full-auto', '--skip-git-repo-check']);
+  assert.equal(freshCodex.args.includes('--cd'), false);
 
   const neovate = buildCommandSpec(config, 'neovate', 'prompt', '/tmp/work', null);
   assert.equal(neovate.command, '/bin/neovate');

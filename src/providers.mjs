@@ -141,7 +141,8 @@ function buildCodexArgs(agentConfig, prompt, workingDir, upstreamSessionId) {
   if (upstreamSessionId) {
     args.push('resume', upstreamSessionId);
   }
-  args.push('--json', '--full-auto', '--skip-git-repo-check', '--cd', workingDir);
+  // `codex exec resume` does not accept `--cd`; rely on the spawned process cwd instead.
+  args.push('--json', '--full-auto', '--skip-git-repo-check');
   if (agentConfig.model) {
     args.push('--model', agentConfig.model);
   }

@@ -17,6 +17,47 @@ function emptyProviderSessionIds() {
   };
 }
 
+function emptyProviderWorkingDirs() {
+  return {
+    claude: null,
+    codex: null,
+    neovate: null,
+  };
+}
+
+function normalizeSession(session) {
+  if (!session) {
+    return session;
+  }
+
+  const providerSessionIds = {
+    ...emptyProviderSessionIds(),
+    ...(session.providerSessionIds || {}),
+  };
+  const providerWorkingDirs = {
+    ...emptyProviderWorkingDirs(),
+    ...(session.providerWorkingDirs || {}),
+  };
+
+  // Older sessions only stored a single workingDir. Reuse it as a best-effort
+  // provider cwd hint so future cwd changes can decide whether a provider
+  // session should be resumed or restarted.
+  if (session.workingDir && !session.providerWorkingDirs) {
+    for (const [agent, sessionId] of Object.entries(providerSessionIds)) {
+      if (sessionId && !providerWorkingDirs[agent]) {
+        providerWorkingDirs[agent] = session.workingDir;
+      }
+    }
+  }
+
+  return {
+    ...session,
+    workingDir: session.workingDir || null,
+    providerSessionIds,
+    providerWorkingDirs,
+  };
+}
+
 export class StateStore {
   constructor(stateDir) {
     this.stateDir = stateDir;
@@ -60,7 +101,7 @@ export class StateStore {
 
   getSessionById(sessionId) {
     const session = this.sessions[sessionId];
-    return session ? cloneJson(session) : null;
+    return session ? cloneJson(normalizeSession(session)) : null;
   }
 
   getActiveSession(userId) {
@@ -68,15 +109,17 @@ export class StateStore {
     return sessionId ? this.getSessionById(sessionId) : null;
   }
 
-  async createSession(userId, activeAgent) {
-    const session = {
+  async createSession(userId, activeAgent, workingDir = null) {
+    const session = normalizeSession({
       id: crypto.randomUUID(),
       telegramUserId: userId,
       activeAgent,
+      workingDir,
       providerSessionIds: emptyProviderSessionIds(),
+      providerWorkingDirs: emptyProviderWorkingDirs(),
       createdAt: nowIso(),
       updatedAt: nowIso(),
-    };
+    });
     this.sessions[session.id] = session;
     this.activeSessions[userId] = session.id;
     await this.persistSessions();
@@ -84,22 +127,22 @@ export class StateStore {
     return cloneJson(session);
   }
 
-  async ensureActiveSession(userId, activeAgent) {
-    return this.getActiveSession(userId) || this.createSession(userId, activeAgent);
+  async ensureActiveSession(userId, activeAgent, workingDir = null) {
+    return this.getActiveSession(userId) || this.createSession(userId, activeAgent, workingDir);
   }
 
   async saveSession(session) {
-    const updated = {
+    const updated = normalizeSession({
       ...session,
       updatedAt: nowIso(),
-    };
+    });
     this.sessions[updated.id] = cloneJson(updated);
     await this.persistSessions();
     return cloneJson(updated);
   }
 
-  async replaceActiveSession(userId, activeAgent) {
-    return this.createSession(userId, activeAgent);
+  async replaceActiveSession(userId, activeAgent, workingDir = null) {
+    return this.createSession(userId, activeAgent, workingDir);
   }
 
   async setActiveAgent(userId, agent) {
@@ -108,6 +151,20 @@ export class StateStore {
       return this.createSession(userId, agent);
     }
     session.activeAgent = agent;
+    await this.saveSession(session);
+    return session;
+  }
+
+  async setWorkingDir(userId, activeAgent, workingDir) {
+    const session = this.getActiveSession(userId);
+    if (!session) {
+      return this.createSession(userId, activeAgent, workingDir);
+    }
+    if (session.workingDir !== workingDir) {
+      session.providerSessionIds[activeAgent] = null;
+      session.providerWorkingDirs[activeAgent] = null;
+    }
+    session.workingDir = workingDir;
     await this.saveSession(session);
     return session;
   }

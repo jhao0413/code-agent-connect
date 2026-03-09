@@ -10,8 +10,9 @@ test('StateStore persists sessions and offsets', async () => {
   const store = new StateStore(stateDir);
   await store.init();
 
-  const session = await store.createSession('42', 'claude');
+  const session = await store.createSession('42', 'claude', '/tmp/work');
   session.providerSessionIds.claude = 'session-123';
+  session.providerWorkingDirs.claude = '/tmp/work';
   await store.saveSession(session);
   await store.setTelegramOffset(10);
 
@@ -20,6 +21,8 @@ test('StateStore persists sessions and offsets', async () => {
 
   const restored = reloaded.getActiveSession('42');
   assert.equal(restored.activeAgent, 'claude');
+  assert.equal(restored.workingDir, '/tmp/work');
   assert.equal(restored.providerSessionIds.claude, 'session-123');
+  assert.equal(restored.providerWorkingDirs.claude, '/tmp/work');
   assert.equal(reloaded.getTelegramOffset(), 10);
 });
