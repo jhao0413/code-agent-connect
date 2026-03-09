@@ -194,3 +194,12 @@ export function formatCheckResult(ok, label, detail = '') {
 export function escapeSystemdValue(value) {
   return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
 }
+
+export function escapePlistValue(value) {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}

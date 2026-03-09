@@ -1,4 +1,5 @@
 import fs from 'node:fs/promises';
+import os from 'node:os';
 import { TelegramClient } from './telegram-client.mjs';
 import {
   fileExists,
@@ -7,7 +8,7 @@ import {
   isWritableDirectory,
   runCommand,
 } from './utils.mjs';
-import { getLingerStatus } from './service-manager.mjs';
+import { getLingerStatus, LAUNCHD_LABEL } from './service-manager.mjs';
 import { resolveAgentBinary } from './config.mjs';
 
 export async function runDoctor(config) {
@@ -55,22 +56,33 @@ export async function runDoctor(config) {
     push(false, 'Telegram token is valid', error instanceof Error ? error.message : String(error));
   }
 
-  const systemctlVersion = await runCommand('systemctl', ['--user', '--version']);
-  push(systemctlVersion.code === 0, 'systemd user service is available', systemctlVersion.code === 0 ? 'systemctl --user' : systemctlVersion.stderr.trim());
+  if (os.platform() === 'darwin') {
+    const launchctlList = await runCommand('launchctl', ['list', LAUNCHD_LABEL]);
+    const loaded = launchctlList.code === 0;
+    push(loaded, 'launchd agent is loaded', loaded ? LAUNCHD_LABEL : 'not loaded');
 
-  if (systemctlVersion.code === 0) {
-    const enabled = await runCommand('systemctl', ['--user', 'is-enabled', 'code-agent-connect.service']);
-    push(enabled.code === 0, 'Service is enabled', enabled.stdout.trim() || enabled.stderr.trim());
-
-    const active = await runCommand('systemctl', ['--user', 'is-active', 'code-agent-connect.service']);
-    push(active.code === 0, 'Service is active', active.stdout.trim() || active.stderr.trim());
-  }
-
-  const linger = await getLingerStatus();
-  if (linger.available) {
-    push(linger.enabled, 'systemd linger is enabled', linger.enabled ? 'enabled' : 'run: sudo loginctl enable-linger $USER');
+    if (loaded) {
+      const hasPid = /^\s*"PID"\s*=/m.test(launchctlList.stdout);
+      push(hasPid, 'Service is running', hasPid ? 'running' : 'not running');
+    }
   } else {
-    push(false, 'systemd linger is enabled', 'loginctl not available');
+    const systemctlVersion = await runCommand('systemctl', ['--user', '--version']);
+    push(systemctlVersion.code === 0, 'systemd user service is available', systemctlVersion.code === 0 ? 'systemctl --user' : systemctlVersion.stderr.trim());
+
+    if (systemctlVersion.code === 0) {
+      const enabled = await runCommand('systemctl', ['--user', 'is-enabled', 'code-agent-connect.service']);
+      push(enabled.code === 0, 'Service is enabled', enabled.stdout.trim() || enabled.stderr.trim());
+
+      const active = await runCommand('systemctl', ['--user', 'is-active', 'code-agent-connect.service']);
+      push(active.code === 0, 'Service is active', active.stdout.trim() || active.stderr.trim());
+    }
+
+    const linger = await getLingerStatus();
+    if (linger.available) {
+      push(linger.enabled, 'systemd linger is enabled', linger.enabled ? 'enabled' : 'run: sudo loginctl enable-linger $USER');
+    } else {
+      push(false, 'systemd linger is enabled', 'loginctl not available');
+    }
   }
 
   return {

@@ -7,18 +7,21 @@ Minimal Telegram bridge for local `claude`, `codex`, and `neovate` CLIs.
 - Telegram private chat only
 - One active logical session per Telegram user
 - Three local agents: `claude`, `codex`, `neovate`
-- `systemd --user` for restart and boot-time startup
+- Foreground `serve` runtime on macOS and Linux
+- `systemd --user` on Linux and `launchd` on macOS for restart and boot-time startup
 - No webhook, no group chat, no image/file input, no Telegram-side permission buttons
 
 ## Requirements
 
-- Linux
+- macOS or Linux
 - Node.js 20+
 - Telegram bot token
 - Installed local CLIs:
   - `claude`
   - `codex`
   - `neovate`
+
+Windows is not supported at the moment.
 
 ## Configure
 
@@ -43,14 +46,14 @@ If you use a local proxy such as Clash, set:
 proxy_url = "http://127.0.0.1:7890"
 ```
 
-`serve`, `doctor`, and the generated `systemd --user` service will then propagate the proxy to Telegram access and to the three agent CLIs.
+`serve`, `doctor`, and the generated service (`systemd --user` on Linux, `launchd` on macOS) will then propagate the proxy to Telegram access and to the three agent CLIs.
 
 ## Commands
 
 ```bash
 npm run build
-node dist/cli.mjs doctor
 node dist/cli.mjs serve
+node dist/cli.mjs doctor
 node dist/cli.mjs service install
 ```
 
@@ -69,7 +72,10 @@ Each Telegram logical session keeps its own working directory. `/set_working_dir
 
 ## Keeping It Running
 
-`code-agent-connect` is a regular foreground Node process. Long-term uptime is handled by `systemd --user`.
+`code-agent-connect` is a regular foreground Node process on macOS and Linux. `service install` sets up a background daemon that auto-restarts and survives reboot:
+
+- **Linux**: `systemd --user` service
+- **macOS**: `launchd` launch agent
 
 Install the service:
 
@@ -78,7 +84,9 @@ npm run build
 node dist/cli.mjs service install
 ```
 
-Make it survive reboot and login/logout the same way as a normal `systemd` user service:
+### Linux only
+
+Make it survive reboot and login/logout:
 
 ```bash
 sudo loginctl enable-linger "$USER"
@@ -88,6 +96,17 @@ Inspect logs:
 
 ```bash
 journalctl --user -u code-agent-connect -f
+```
+
+### macOS only
+
+The launch agent starts at login automatically (`RunAtLoad` + `KeepAlive`). No extra step is needed.
+
+Inspect logs:
+
+```bash
+tail -f ~/.local/state/code-agent-connect/stdout.log
+tail -f ~/.local/state/code-agent-connect/stderr.log
 ```
 
 ## Development

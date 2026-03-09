@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 
-import { applyRuntimeEnvironment, defaultSystemdUserDir, loadConfig } from './config.mjs';
+import os from 'node:os';
+import { applyRuntimeEnvironment, defaultLaunchAgentDir, defaultSystemdUserDir, loadConfig } from './config.mjs';
 import { BridgeService } from './bridge-service.mjs';
 import { StateStore } from './storage.mjs';
 import { runDoctor } from './doctor.mjs';
-import { getLingerStatus, installService, uninstallService } from './service-manager.mjs';
+import { getLingerStatus, installService, LAUNCHD_LABEL, uninstallService } from './service-manager.mjs';
 
 function printHelp() {
   console.log(
@@ -68,17 +69,26 @@ async function main() {
     const config = await loadConfig(configPath);
     applyRuntimeEnvironment(config);
     const result = await installService(config);
-    const linger = await getLingerStatus();
-    console.log(`Installed user service at ${result.unitPath}`);
-    if (!linger.available || !linger.enabled) {
-      console.log(`Enable boot-time startup with: sudo loginctl enable-linger ${process.env.USER}`);
+    if (os.platform() === 'darwin') {
+      console.log(`Installed launch agent at ${result.plistPath}`);
+    } else {
+      const linger = await getLingerStatus();
+      console.log(`Installed user service at ${result.unitPath}`);
+      if (!linger.available || !linger.enabled) {
+        console.log(`Enable boot-time startup with: sudo loginctl enable-linger ${process.env.USER}`);
+      }
     }
     return;
   }
 
   if (command === 'service' && subcommand === 'uninstall') {
-    await uninstallService({ systemdUserDir: defaultSystemdUserDir() });
-    console.log('Removed code-agent-connect.service');
+    if (os.platform() === 'darwin') {
+      await uninstallService({ launchAgentDir: defaultLaunchAgentDir() });
+      console.log(`Removed ${LAUNCHD_LABEL} launch agent`);
+    } else {
+      await uninstallService({ systemdUserDir: defaultSystemdUserDir() });
+      console.log('Removed code-agent-connect.service');
+    }
     return;
   }
 

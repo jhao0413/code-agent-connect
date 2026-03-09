@@ -1,5 +1,6 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import os from 'node:os';
 import { parseToml } from './toml.mjs';
 import {
   coerceStringArray,
@@ -20,6 +21,10 @@ export function defaultStateDir() {
 
 export function defaultSystemdUserDir() {
   return expandHomePath('~/.config/systemd/user');
+}
+
+export function defaultLaunchAgentDir() {
+  return expandHomePath('~/Library/LaunchAgents');
 }
 
 export function agentBinEnvName(agent) {
@@ -125,6 +130,7 @@ export async function loadConfig(configPath = defaultConfigPath()) {
     configPath,
     stateDir: defaultStateDir(),
     systemdUserDir: defaultSystemdUserDir(),
+    ...(os.platform() === 'darwin' ? { launchAgentDir: defaultLaunchAgentDir() } : {}),
     telegram: {
       botToken: telegram.bot_token,
       allowedUserIds,
