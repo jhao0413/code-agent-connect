@@ -74,10 +74,11 @@ proxy_url = "http://127.0.0.1:7890"
 ## 命令
 
 ```bash
-npm run build
-node dist/cli.mjs serve
-node dist/cli.mjs doctor
-node dist/cli.mjs service install
+npm run build                        # 编译 TypeScript 到 dist/
+node dist/cli.mjs serve              # 启动桥接服务（前台运行）
+node dist/cli.mjs doctor             # 检查配置、二进制文件、Telegram token 及服务状态
+node dist/cli.mjs service install    # 安装为后台服务（systemd/launchd）
+node dist/cli.mjs service uninstall  # 卸载后台服务
 ```
 
 ## Telegram 命令
