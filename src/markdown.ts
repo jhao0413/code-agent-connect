@@ -13,12 +13,12 @@
 const TABLE_LINE = /^\|.+\|$/;
 const SEPARATOR_LINE = /^\|[\s:|-]+$/;
 
-function extractTableBlocks(text) {
+function extractTableBlocks(text: string): { text: string; tables: string[] } {
   const lines = text.split('\n');
-  const tables = [];
-  let buf = [];
+  const tables: string[] = [];
+  let buf: string[] = [];
 
-  const flushTable = () => {
+  const flushTable = (): string => {
     if (buf.length >= 2) {
       tables.push(buf.join('\n'));
       return `\x00TB${tables.length - 1}\x00`;
@@ -29,7 +29,7 @@ function extractTableBlocks(text) {
     return plain;
   };
 
-  const out = [];
+  const out: string[] = [];
   for (const line of lines) {
     if (TABLE_LINE.test(line.trim())) {
       buf.push(line);
@@ -53,7 +53,7 @@ function extractTableBlocks(text) {
  * Render a markdown table as a plain-text aligned table suitable for <pre>.
  * Strips the `|` borders and separator row, pads columns to equal width.
  */
-function renderTableBlock(tableText) {
+function renderTableBlock(tableText: string): string {
   const rows = tableText
     .split('\n')
     .filter((r) => !SEPARATOR_LINE.test(r.trim()));
@@ -85,18 +85,18 @@ function renderTableBlock(tableText) {
     .join('\n');
 }
 
-function escapeHtml(str) {
+function escapeHtml(str: string): string {
   return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
-export function markdownToTelegramHtml(text) {
+export function markdownToTelegramHtml(text: string): string {
   if (!text) {
     return '';
   }
 
-  const codeBlocks = [];
-  const inlineCodes = [];
-  const tableBlocks = [];
+  const codeBlocks: string[] = [];
+  const inlineCodes: string[] = [];
+  const tableBlocks: string[] = [];
 
   // 1. Extract fenced code blocks (``` ... ```)
   let result = text.replace(/```[\s\S]*?```/g, (match) => {
@@ -106,7 +106,7 @@ export function markdownToTelegramHtml(text) {
   });
 
   // 2. Extract inline code (` ... `)
-  result = result.replace(/`([^`]+)`/g, (match, code) => {
+  result = result.replace(/`([^`]+)`/g, (_match, code: string) => {
     const idx = inlineCodes.length;
     inlineCodes.push(code);
     return `\x00IC${idx}\x00`;

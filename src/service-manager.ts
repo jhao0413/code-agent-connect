@@ -8,21 +8,22 @@ import {
   escapeSystemdValue,
   fileExists,
   runCommand,
-} from './utils.mjs';
-import { defaultLaunchAgentDir as defaultLaunchAgentDirFn, resolveAgentBinary } from './config.mjs';
+} from './utils.js';
+import { defaultLaunchAgentDir as defaultLaunchAgentDirFn, resolveAgentBinary } from './config.js';
+import type { Config, LingerStatus, RenderServiceParams } from './types.js';
 
 export const SERVICE_NAME = 'code-agent-connect.service';
 export const LAUNCHD_LABEL = 'com.code-agent-connect';
 
-export function getProjectRoot() {
+export function getProjectRoot(): string {
   return path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 }
 
-function quoteExecArg(value) {
+function quoteExecArg(value: string): string {
   return `"${escapeSystemdValue(value)}"`;
 }
 
-export function renderServiceUnit({ config, projectRoot, nodePath, resolvedBins, environmentPath }) {
+export function renderServiceUnit({ config, projectRoot, nodePath, resolvedBins, environmentPath }: RenderServiceParams): string {
   const envLines = [
     `Environment="PATH=${escapeSystemdValue(environmentPath)}"`,
   ];
@@ -46,7 +47,7 @@ export function renderServiceUnit({ config, projectRoot, nodePath, resolvedBins,
     );
   }
 
-  const distCliPath = path.join(projectRoot, 'dist', 'cli.mjs');
+  const distCliPath = path.join(projectRoot, 'dist', 'cli.js');
   const execStart = [nodePath, distCliPath, 'serve', '--config', config.configPath]
     .map((value) => quoteExecArg(value))
     .join(' ');
@@ -71,14 +72,14 @@ export function renderServiceUnit({ config, projectRoot, nodePath, resolvedBins,
   ].join('\n');
 }
 
-async function resolveSystemctl() {
+async function resolveSystemctl(): Promise<void> {
   const result = await runCommand('systemctl', ['--user', '--version']);
   if (result.code !== 0) {
     throw new Error(result.stderr.trim() || 'systemctl --user is not available');
   }
 }
 
-export async function getLingerStatus(username = os.userInfo().username) {
+export async function getLingerStatus(username = os.userInfo().username): Promise<LingerStatus> {
   const result = await runCommand('loginctl', ['show-user', username, '--property=Linger', '--value']);
   if (result.code !== 0) {
     return { available: false, enabled: false };
@@ -89,7 +90,7 @@ export async function getLingerStatus(username = os.userInfo().username) {
   };
 }
 
-export async function installService(config) {
+export async function installService(config: Config): Promise<{ unitPath?: string; plistPath?: string }> {
   if (os.platform() === 'darwin') {
     return installLaunchAgent(config);
   }
@@ -97,12 +98,12 @@ export async function installService(config) {
   await resolveSystemctl();
 
   const projectRoot = getProjectRoot();
-  const distCliPath = path.join(projectRoot, 'dist', 'cli.mjs');
+  const distCliPath = path.join(projectRoot, 'dist', 'cli.js');
   if (!(await fileExists(distCliPath))) {
-    throw new Error('dist/cli.mjs is missing. Run `npm run build` first.');
+    throw new Error('dist/cli.js is missing. Run `npm run build` first.');
   }
 
-  const resolvedBins = {};
+  const resolvedBins: Record<string, string> = {};
   for (const agent of config.agents.enabled) {
     const binaryPath = resolveAgentBinary(config, agent);
     if (!binaryPath) {
@@ -137,14 +138,14 @@ export async function installService(config) {
   return { unitPath };
 }
 
-export async function uninstallService(config) {
+export async function uninstallService(config: { systemdUserDir?: string; launchAgentDir?: string }): Promise<void> {
   if (os.platform() === 'darwin') {
-    return uninstallLaunchAgent(config);
+    return uninstallLaunchAgent(config as { launchAgentDir: string });
   }
 
   await resolveSystemctl();
 
-  const unitPath = path.join(config.systemdUserDir, SERVICE_NAME);
+  const unitPath = path.join(config.systemdUserDir!, SERVICE_NAME);
   await runCommand('systemctl', ['--user', 'disable', '--now', 'code-agent-connect.service']);
   await fs.rm(unitPath, { force: true });
 
@@ -154,9 +155,9 @@ export async function uninstallService(config) {
   }
 }
 
-export function renderLaunchAgentPlist({ config, projectRoot, nodePath, resolvedBins, environmentPath }) {
+export function renderLaunchAgentPlist({ config, projectRoot, nodePath, resolvedBins, environmentPath }: RenderServiceParams): string {
   const esc = escapePlistValue;
-  const distCliPath = path.join(projectRoot, 'dist', 'cli.mjs');
+  const distCliPath = path.join(projectRoot, 'dist', 'cli.js');
 
   const envEntries = [`      <key>PATH</key>\n      <string>${esc(environmentPath)}</string>`];
   if (config.network?.proxyUrl) {
@@ -211,14 +212,14 @@ export function renderLaunchAgentPlist({ config, projectRoot, nodePath, resolved
   ].join('\n');
 }
 
-export async function installLaunchAgent(config) {
+export async function installLaunchAgent(config: Config): Promise<{ plistPath: string }> {
   const projectRoot = getProjectRoot();
-  const distCliPath = path.join(projectRoot, 'dist', 'cli.mjs');
+  const distCliPath = path.join(projectRoot, 'dist', 'cli.js');
   if (!(await fileExists(distCliPath))) {
-    throw new Error('dist/cli.mjs is missing. Run `npm run build` first.');
+    throw new Error('dist/cli.js is missing. Run `npm run build` first.');
   }
 
-  const resolvedBins = {};
+  const resolvedBins: Record<string, string> = {};
   for (const agent of config.agents.enabled) {
     const binaryPath = resolveAgentBinary(config, agent);
     if (!binaryPath) {
@@ -227,7 +228,7 @@ export async function installLaunchAgent(config) {
     resolvedBins[agent] = binaryPath;
   }
 
-  const agentDir = config.launchAgentDir;
+  const agentDir = config.launchAgentDir!;
   const plistPath = path.join(agentDir, `${LAUNCHD_LABEL}.plist`);
   const plistContent = renderLaunchAgentPlist({
     config,
@@ -249,13 +250,13 @@ export async function installLaunchAgent(config) {
   return { plistPath };
 }
 
-export async function uninstallLaunchAgent(config) {
+export async function uninstallLaunchAgent(config: { launchAgentDir: string }): Promise<void> {
   const plistPath = path.join(config.launchAgentDir, `${LAUNCHD_LABEL}.plist`);
   await runCommand('launchctl', ['unload', plistPath]);
   await fs.rm(plistPath, { force: true });
 }
 
-export async function isServiceRunning() {
+export async function isServiceRunning(): Promise<boolean> {
   if (os.platform() === 'darwin') {
     const result = await runCommand('launchctl', ['list', LAUNCHD_LABEL]);
     return result.code === 0 && /^\s*"PID"\s*=\s*\d+/m.test(result.stdout);
@@ -264,7 +265,7 @@ export async function isServiceRunning() {
   return result.stdout.trim() === 'active';
 }
 
-export async function restartService() {
+export async function restartService(): Promise<void> {
   if (os.platform() === 'darwin') {
     const plistPath = path.join(defaultLaunchAgentDirFn(), `${LAUNCHD_LABEL}.plist`);
     await runCommand('launchctl', ['unload', plistPath]);

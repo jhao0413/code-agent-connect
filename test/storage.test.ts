@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { StateStore } from '../src/storage.mjs';
+import { StateStore } from '../src/storage.js';
 
 test('StateStore persists sessions and offsets', async () => {
   const stateDir = await fs.mkdtemp(path.join(os.tmpdir(), 'cac-state-'));

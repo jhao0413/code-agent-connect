@@ -3,8 +3,9 @@ import fssync from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
+import type { RunCommandResult } from './types.js';
 
-export function expandHomePath(input) {
+export function expandHomePath(input: string): string {
   if (!input) {
     return input;
   }
@@ -17,22 +18,22 @@ export function expandHomePath(input) {
   return input;
 }
 
-export function nowIso() {
+export function nowIso(): string {
   return new Date().toISOString();
 }
 
-export async function ensureDir(dirPath) {
+export async function ensureDir(dirPath: string): Promise<void> {
   await fs.mkdir(dirPath, { recursive: true });
 }
 
-export async function writeFileAtomic(filePath, content) {
+export async function writeFileAtomic(filePath: string, content: string): Promise<void> {
   await ensureDir(path.dirname(filePath));
   const tempPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
   await fs.writeFile(tempPath, content, 'utf8');
   await fs.rename(tempPath, filePath);
 }
 
-export async function readJson(filePath, fallbackValue) {
+export async function readJson<T>(filePath: string, fallbackValue: T): Promise<T> {
   try {
     const raw = await fs.readFile(filePath, 'utf8');
     return JSON.parse(raw);
@@ -41,29 +42,29 @@ export async function readJson(filePath, fallbackValue) {
   }
 }
 
-export async function writeJsonAtomic(filePath, value) {
+export async function writeJsonAtomic(filePath: string, value: unknown): Promise<void> {
   const serialized = `${JSON.stringify(value, null, 2)}\n`;
   await writeFileAtomic(filePath, serialized);
 }
 
-export async function appendLine(filePath, line) {
+export async function appendLine(filePath: string, line: string): Promise<void> {
   await ensureDir(path.dirname(filePath));
   await fs.appendFile(filePath, `${line}\n`, 'utf8');
 }
 
-export function cloneJson(value) {
+export function cloneJson<T>(value: T): T {
   return JSON.parse(JSON.stringify(value));
 }
 
-export function isStringArray(value) {
+export function isStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((entry) => typeof entry === 'string');
 }
 
-export function coerceStringArray(value, label) {
+export function coerceStringArray(value: unknown, label: string): string[] {
   if (!Array.isArray(value)) {
     throw new Error(`${label} must be an array`);
   }
-  return value.map((entry) => {
+  return value.map((entry: unknown) => {
     if (typeof entry === 'string') {
       return entry;
     }
@@ -74,12 +75,12 @@ export function coerceStringArray(value, label) {
   });
 }
 
-export function chunkText(text, maxLength = 3500) {
+export function chunkText(text: string, maxLength = 3500): string[] {
   if (!text) {
     return [];
   }
 
-  const chunks = [];
+  const chunks: string[] = [];
   let remaining = text;
   while (remaining.length > maxLength) {
     let boundary = remaining.lastIndexOf('\n', maxLength);
@@ -98,18 +99,18 @@ export function chunkText(text, maxLength = 3500) {
   return chunks.filter(Boolean);
 }
 
-export function sleep(ms) {
+export function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-export function toErrorMessage(error) {
+export function toErrorMessage(error: unknown): string {
   if (error instanceof Error) {
     return error.stack || error.message;
   }
   return String(error);
 }
 
-export async function fileExists(filePath) {
+export async function fileExists(filePath: string): Promise<boolean> {
   try {
     await fs.access(filePath);
     return true;
@@ -118,7 +119,7 @@ export async function fileExists(filePath) {
   }
 }
 
-export function isExecutable(filePath) {
+export function isExecutable(filePath: string): boolean {
   try {
     fssync.accessSync(filePath, fssync.constants.X_OK);
     return true;
@@ -127,7 +128,7 @@ export function isExecutable(filePath) {
   }
 }
 
-export function which(command, envPath = process.env.PATH || '') {
+export function which(command: string, envPath = process.env.PATH || ''): string | null {
   if (!command) {
     return null;
   }
@@ -144,7 +145,7 @@ export function which(command, envPath = process.env.PATH || '') {
   return null;
 }
 
-export async function isWritableDirectory(dirPath) {
+export async function isWritableDirectory(dirPath: string): Promise<boolean> {
   try {
     await ensureDir(dirPath);
     const tempPath = path.join(dirPath, `.tmp-${process.pid}-${Date.now()}`);
@@ -156,7 +157,11 @@ export async function isWritableDirectory(dirPath) {
   }
 }
 
-export async function runCommand(command, args, options = {}) {
+export async function runCommand(
+  command: string,
+  args: string[],
+  options: { cwd?: string; env?: NodeJS.ProcessEnv } = {},
+): Promise<RunCommandResult> {
   const child = spawn(command, args, {
     cwd: options.cwd,
     env: options.env || process.env,
@@ -166,36 +171,36 @@ export async function runCommand(command, args, options = {}) {
   let stdout = '';
   let stderr = '';
 
-  child.stdout.on('data', (chunk) => {
+  child.stdout.on('data', (chunk: Buffer) => {
     stdout += chunk.toString();
   });
-  child.stderr.on('data', (chunk) => {
+  child.stderr.on('data', (chunk: Buffer) => {
     stderr += chunk.toString();
   });
 
   let errored = false;
-  const code = await new Promise((resolve) => {
-    child.once('error', (error) => {
+  const code = await new Promise<number>((resolve) => {
+    child.once('error', (error: unknown) => {
       errored = true;
       stderr += error instanceof Error ? error.message : String(error);
       resolve(127);
     });
-    child.once('close', (closeCode) => resolve(closeCode ?? 0));
+    child.once('close', (closeCode: number | null) => resolve(closeCode ?? 0));
   });
 
   return { code, stdout, stderr, errored };
 }
 
-export function formatCheckResult(ok, label, detail = '') {
+export function formatCheckResult(ok: boolean, label: string, detail = ''): string {
   const prefix = ok ? '[OK]  ' : '[FAIL]';
   return `${prefix} ${label}${detail ? `: ${detail}` : ''}`;
 }
 
-export function escapeSystemdValue(value) {
+export function escapeSystemdValue(value: string): string {
   return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
 }
 
-export function escapePlistValue(value) {
+export function escapePlistValue(value: string): string {
   return value
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')

@@ -4,13 +4,18 @@
   "description": "A minimal Telegram bridge for local Claude, Codex, and Neovate CLIs",
   "type": "module",
   "bin": {
-    "code-agent-connect": "./dist/cli.mjs"
+    "code-agent-connect": "./dist/cli.js"
   },
   "scripts": {
-    "build": "node scripts/build.mjs",
-    "test": "node --test"
+    "build": "tsc",
+    "test": "node --import tsx --test test/**/*.test.ts"
   },
   "engines": {
     "node": ">=20"
+  },
+  "devDependencies": {
+    "@types/node": "^25.4.0",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3"
   }
 }

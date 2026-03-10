@@ -1,5 +1,6 @@
 import path from 'node:path';
-import { readJson, runCommand, writeJsonAtomic } from './utils.mjs';
+import { readJson, runCommand, writeJsonAtomic } from './utils.js';
+import type { UpdateCheckResult } from './types.js';
 
 const CACHE_TTL_MS = 6 * 60 * 60 * 1000; // 6 hours
 const CACHE_FILE = 'update-check.json';
@@ -10,19 +11,19 @@ const CACHE_FILE = 'update-check.json';
  *
  * Note: assumes the git remote is named "origin" and the primary branch is "main".
  */
-export async function checkForUpdate({ projectRoot, stateDir, force = false }) {
+export async function checkForUpdate({ projectRoot, stateDir, force = false }: { projectRoot: string; stateDir: string; force?: boolean }): Promise<UpdateCheckResult | null> {
   const cachePath = path.join(stateDir, CACHE_FILE);
 
   if (!force) {
-    const cached = await readJson(cachePath, null);
+    const cached = await readJson<{ checkedAt: number; result: UpdateCheckResult } | null>(cachePath, null);
     if (cached && Date.now() - cached.checkedAt < CACHE_TTL_MS) {
       return cached.result;
     }
   }
 
   // Fetch latest tags from remote
-  const fetch = await runCommand('git', ['fetch', '--tags', '--quiet'], { cwd: projectRoot });
-  if (fetch.code !== 0) {
+  const fetchResult = await runCommand('git', ['fetch', '--tags', '--quiet'], { cwd: projectRoot });
+  if (fetchResult.code !== 0) {
     return null;
   }
 
@@ -38,17 +39,17 @@ export async function checkForUpdate({ projectRoot, stateDir, force = false }) {
   const latestVersion = remoteTag.code === 0 ? remoteTag.stdout.trim() : null;
 
   // Get local tag version, fall back to package.json
-  let currentVersion;
+  let currentVersion: string;
   const localTag = await runCommand('git', ['describe', '--tags', '--abbrev=0', 'HEAD'], { cwd: projectRoot });
   if (localTag.code === 0 && localTag.stdout.trim()) {
     currentVersion = localTag.stdout.trim();
   } else {
-    const pkg = await readJson(path.join(projectRoot, 'package.json'), {});
+    const pkg = await readJson<{ version?: string }>(path.join(projectRoot, 'package.json'), {});
     currentVersion = pkg.version ? `v${pkg.version}` : 'unknown';
   }
 
   const available = behind > 0;
-  const result = { available, currentVersion, latestVersion, behind };
+  const result: UpdateCheckResult = { available, currentVersion, latestVersion, behind };
 
   // Cache the result
   try {
@@ -63,7 +64,7 @@ export async function checkForUpdate({ projectRoot, stateDir, force = false }) {
 /**
  * Format a human-readable update notice. Returns null if no update available.
  */
-export function formatUpdateNotice(result) {
+export function formatUpdateNotice(result: UpdateCheckResult | null): string | null {
   if (!result || !result.available) {
     return null;
   }
@@ -80,7 +81,12 @@ export function formatUpdateNotice(result) {
  * Perform the actual update: git pull, npm install, npm run build.
  * Throws on failure at any step.
  */
-export async function performUpdate({ projectRoot, stateDir, isServiceRunning, restartService }) {
+export async function performUpdate({ projectRoot, stateDir, isServiceRunning, restartService }: {
+  projectRoot: string;
+  stateDir: string;
+  isServiceRunning?: () => Promise<boolean>;
+  restartService?: () => Promise<void>;
+}): Promise<void> {
   // Check for local modifications
   const status = await runCommand('git', ['status', '--porcelain'], { cwd: projectRoot });
   if (status.code !== 0) {
@@ -124,7 +130,7 @@ export async function performUpdate({ projectRoot, stateDir, isServiceRunning, r
   }
 
   // Read new version
-  const pkg = await readJson(path.join(projectRoot, 'package.json'), {});
+  const pkg = await readJson<{ version?: string }>(path.join(projectRoot, 'package.json'), {});
   const newVersion = pkg.version ? `v${pkg.version}` : 'unknown';
   console.log(`Updated to ${newVersion}`);
 

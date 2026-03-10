@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { agentBinEnvName, loadConfig } from '../src/config.mjs';
+import { agentBinEnvName, loadConfig } from '../src/config.js';
 
 function configText() {
   return `

@@ -1,4 +1,4 @@
-function stripComments(line) {
+function stripComments(line: string): string {
   let inString = false;
   let quoteChar = '';
   for (let index = 0; index < line.length; index += 1) {
@@ -20,8 +20,8 @@ function stripComments(line) {
   return line;
 }
 
-function splitArrayItems(input) {
-  const items = [];
+function splitArrayItems(input: string): string[] {
+  const items: string[] = [];
   let current = '';
   let depth = 0;
   let inString = false;
@@ -60,7 +60,7 @@ function splitArrayItems(input) {
   return items;
 }
 
-function parseString(input) {
+function parseString(input: string): string {
   const quote = input[0];
   let result = '';
   for (let index = 1; index < input.length - 1; index += 1) {
@@ -82,7 +82,9 @@ function parseString(input) {
   return result;
 }
 
-function parseValue(input) {
+type TomlValue = string | number | boolean | TomlValue[];
+
+function parseValue(input: string): TomlValue {
   const trimmed = input.trim();
   if (!trimmed) {
     throw new Error('Empty TOML value');
@@ -112,8 +114,12 @@ function parseValue(input) {
   throw new Error(`Unsupported TOML value: ${trimmed}`);
 }
 
-function ensureObjectPath(root, keys) {
-  let cursor = root;
+export interface TomlObject {
+  [key: string]: TomlValue | TomlObject;
+}
+
+function ensureObjectPath(root: TomlObject, keys: string[]): TomlObject {
+  let cursor: TomlObject = root;
   for (const key of keys) {
     if (!Object.hasOwn(cursor, key)) {
       cursor[key] = {};
@@ -121,14 +127,14 @@ function ensureObjectPath(root, keys) {
     if (typeof cursor[key] !== 'object' || cursor[key] === null || Array.isArray(cursor[key])) {
       throw new Error(`TOML section conflict at ${keys.join('.')}`);
     }
-    cursor = cursor[key];
+    cursor = cursor[key] as TomlObject;
   }
   return cursor;
 }
 
-export function parseToml(input) {
-  const root = {};
-  let cursor = root;
+export function parseToml(input: string): TomlObject {
+  const root: TomlObject = {};
+  let cursor: TomlObject = root;
 
   for (const rawLine of input.split(/\r?\n/u)) {
     const line = stripComments(rawLine).trim();

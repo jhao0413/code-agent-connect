@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { markdownToTelegramHtml } from '../src/markdown.mjs';
+import { markdownToTelegramHtml } from '../src/markdown.js';
 
 test('markdownToTelegramHtml returns empty string for falsy input', () => {
   assert.equal(markdownToTelegramHtml(''), '');

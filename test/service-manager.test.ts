@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { renderServiceUnit } from '../src/service-manager.mjs';
+import { renderServiceUnit } from '../src/service-manager.js';
 
 test('renderServiceUnit includes resolved env vars and exec start', () => {
   const unit = renderServiceUnit({
@@ -23,5 +23,5 @@ test('renderServiceUnit includes resolved env vars and exec start', () => {
   assert.match(unit, /Environment="CAC_CLAUDE_BIN=\/home\/jhao\/\.local\/bin\/claude"/);
   assert.match(unit, /Environment="HTTP_PROXY=http:\/\/127\.0\.0\.1:7890"/);
   assert.match(unit, /Environment="NODE_USE_ENV_PROXY=1"/);
-  assert.match(unit, /ExecStart="\/usr\/bin\/node" "\/home\/jhao\/Projects\/code-agent-connect\/dist\/cli\.mjs" "serve" "--config" "\/home\/jhao\/\.code-agent-contect\/config\.toml"/);
+  assert.match(unit, /ExecStart="\/usr\/bin\/node" "\/home\/jhao\/Projects\/code-agent-connect\/dist\/cli\.js" "serve" "--config" "\/home\/jhao\/\.code-agent-contect\/config\.toml"/);
 });

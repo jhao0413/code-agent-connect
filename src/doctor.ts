@@ -1,22 +1,23 @@
 import fs from 'node:fs/promises';
 import os from 'node:os';
-import { TelegramClient } from './telegram-client.mjs';
+import { TelegramClient } from './telegram-client.js';
 import {
   fileExists,
   formatCheckResult,
   isExecutable,
   isWritableDirectory,
   runCommand,
-} from './utils.mjs';
-import { getLingerStatus, getProjectRoot, LAUNCHD_LABEL } from './service-manager.mjs';
-import { resolveAgentBinary } from './config.mjs';
-import { checkForUpdate } from './updater.mjs';
+} from './utils.js';
+import { getLingerStatus, getProjectRoot, LAUNCHD_LABEL } from './service-manager.js';
+import { resolveAgentBinary } from './config.js';
+import { checkForUpdate } from './updater.js';
+import type { CheckResult, Config } from './types.js';
 
-export async function runDoctor(config) {
-  const lines = [];
+export async function runDoctor(config: Config): Promise<CheckResult> {
+  const lines: string[] = [];
   let failed = 0;
 
-  const push = (ok, label, detail = '') => {
+  const push = (ok: boolean, label: string, detail = ''): void => {
     if (!ok) {
       failed += 1;
     }
@@ -47,7 +48,7 @@ export async function runDoctor(config) {
     const telegram = new TelegramClient(config.telegram.botToken, {
       proxyUrl: config.network?.proxyUrl,
     });
-    const me = await telegram.getMe();
+    const me = await telegram.getMe() as { username?: string; first_name?: string };
     push(
       true,
       'Telegram token is valid',

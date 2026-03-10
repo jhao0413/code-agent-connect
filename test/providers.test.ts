@@ -6,7 +6,7 @@ import {
   parseCodexLine,
   parseNeovateLine,
   parseOpencodeLine,
-} from '../src/providers.mjs';
+} from '../src/providers.js';
 
 test('parseClaudeLine handles real stream-json output', () => {
   const state = {};

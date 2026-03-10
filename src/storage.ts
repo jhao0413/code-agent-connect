@@ -7,34 +7,37 @@ import {
   nowIso,
   readJson,
   writeJsonAtomic,
-} from './utils.mjs';
+} from './utils.js';
+import type { Session, TelegramState, TranscriptEntry } from './types.js';
 
-function emptyProviderSessionIds() {
+function emptyProviderSessionIds(): Record<string, string | null> {
   return {
     claude: null,
     codex: null,
     neovate: null,
+    opencode: null,
   };
 }
 
-function emptyProviderWorkingDirs() {
+function emptyProviderWorkingDirs(): Record<string, string | null> {
   return {
     claude: null,
     codex: null,
     neovate: null,
+    opencode: null,
   };
 }
 
-function normalizeSession(session) {
+function normalizeSession(session: Session): Session {
   if (!session) {
     return session;
   }
 
-  const providerSessionIds = {
+  const providerSessionIds: Record<string, string | null> = {
     ...emptyProviderSessionIds(),
     ...(session.providerSessionIds || {}),
   };
-  const providerWorkingDirs = {
+  const providerWorkingDirs: Record<string, string | null> = {
     ...emptyProviderWorkingDirs(),
     ...(session.providerWorkingDirs || {}),
   };
@@ -42,7 +45,7 @@ function normalizeSession(session) {
   // Older sessions only stored a single workingDir. Reuse it as a best-effort
   // provider cwd hint so future cwd changes can decide whether a provider
   // session should be resumed or restarted.
-  if (session.workingDir && !session.providerWorkingDirs) {
+  if (session.workingDir && !(session as unknown as Record<string, unknown>).providerWorkingDirs) {
     for (const [agent, sessionId] of Object.entries(providerSessionIds)) {
       if (sessionId && !providerWorkingDirs[agent]) {
         providerWorkingDirs[agent] = session.workingDir;
@@ -59,7 +62,16 @@ function normalizeSession(session) {
 }
 
 export class StateStore {
-  constructor(stateDir) {
+  stateDir: string;
+  sessionsFile: string;
+  activeFile: string;
+  telegramFile: string;
+  transcriptsDir: string;
+  sessions: Record<string, Session>;
+  activeSessions: Record<string, string>;
+  telegramState: TelegramState;
+
+  constructor(stateDir: string) {
     this.stateDir = stateDir;
     this.sessionsFile = path.join(stateDir, 'sessions.json');
     this.activeFile = path.join(stateDir, 'active-session.json');
@@ -70,7 +82,7 @@ export class StateStore {
     this.telegramState = { offset: 0 };
   }
 
-  async init() {
+  async init(): Promise<void> {
     await ensureDir(this.stateDir);
     await ensureDir(this.transcriptsDir);
     this.sessions = await readJson(this.sessionsFile, {});
@@ -78,38 +90,38 @@ export class StateStore {
     this.telegramState = await readJson(this.telegramFile, { offset: 0 });
   }
 
-  async persistSessions() {
+  async persistSessions(): Promise<void> {
     await writeJsonAtomic(this.sessionsFile, this.sessions);
   }
 
-  async persistActiveSessions() {
+  async persistActiveSessions(): Promise<void> {
     await writeJsonAtomic(this.activeFile, this.activeSessions);
   }
 
-  async persistTelegramState() {
+  async persistTelegramState(): Promise<void> {
     await writeJsonAtomic(this.telegramFile, this.telegramState);
   }
 
-  getTelegramOffset() {
+  getTelegramOffset(): number {
     return Number(this.telegramState.offset || 0);
   }
 
-  async setTelegramOffset(offset) {
+  async setTelegramOffset(offset: number): Promise<void> {
     this.telegramState.offset = offset;
     await this.persistTelegramState();
   }
 
-  getSessionById(sessionId) {
+  getSessionById(sessionId: string): Session | null {
     const session = this.sessions[sessionId];
     return session ? cloneJson(normalizeSession(session)) : null;
   }
 
-  getActiveSession(userId) {
+  getActiveSession(userId: string): Session | null {
     const sessionId = this.activeSessions[userId];
     return sessionId ? this.getSessionById(sessionId) : null;
   }
 
-  async createSession(userId, activeAgent, workingDir = null) {
+  async createSession(userId: string, activeAgent: string, workingDir: string | null = null): Promise<Session> {
     const session = normalizeSession({
       id: crypto.randomUUID(),
       telegramUserId: userId,
@@ -127,11 +139,11 @@ export class StateStore {
     return cloneJson(session);
   }
 
-  async ensureActiveSession(userId, activeAgent, workingDir = null) {
+  async ensureActiveSession(userId: string, activeAgent: string, workingDir: string | null = null): Promise<Session> {
     return this.getActiveSession(userId) || this.createSession(userId, activeAgent, workingDir);
   }
 
-  async saveSession(session) {
+  async saveSession(session: Session): Promise<Session> {
     const updated = normalizeSession({
       ...session,
       updatedAt: nowIso(),
@@ -141,11 +153,11 @@ export class StateStore {
     return cloneJson(updated);
   }
 
-  async replaceActiveSession(userId, activeAgent, workingDir = null) {
+  async replaceActiveSession(userId: string, activeAgent: string, workingDir: string | null = null): Promise<Session> {
     return this.createSession(userId, activeAgent, workingDir);
   }
 
-  async setActiveAgent(userId, agent) {
+  async setActiveAgent(userId: string, agent: string): Promise<Session> {
     const session = this.getActiveSession(userId);
     if (!session) {
       return this.createSession(userId, agent);
@@ -155,7 +167,7 @@ export class StateStore {
     return session;
   }
 
-  async setWorkingDir(userId, activeAgent, workingDir) {
+  async setWorkingDir(userId: string, activeAgent: string, workingDir: string): Promise<Session> {
     const session = this.getActiveSession(userId);
     if (!session) {
       return this.createSession(userId, activeAgent, workingDir);
@@ -169,7 +181,7 @@ export class StateStore {
     return session;
   }
 
-  async appendTranscript(sessionId, entry) {
+  async appendTranscript(sessionId: string, entry: TranscriptEntry): Promise<void> {
     const filePath = path.join(this.transcriptsDir, `${sessionId}.jsonl`);
     const record = {
       timestamp: nowIso(),

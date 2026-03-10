@@ -7,9 +7,9 @@ import {
   extractImageInfo,
   getUnsupportedMediaRejection,
   BridgeService,
-} from '../src/bridge-service.mjs';
-import { buildCommandSpec } from '../src/providers.mjs';
-import { StateStore } from '../src/storage.mjs';
+} from '../src/bridge-service.js';
+import { buildCommandSpec } from '../src/providers.js';
+import { StateStore } from '../src/storage.js';
 
 // ---------- extractImageInfo ----------
 
@@ -145,7 +145,7 @@ test('buildCommandSpec adds --image for codex resume with attachments', () => {
 
 test('streamAgentTurn rejects images for claude', async () => {
   // We import streamAgentTurn dynamically to test the rejection path
-  const { streamAgentTurn } = await import('../src/providers.mjs');
+  const { streamAgentTurn } = await import('../src/providers.js');
   const events = [];
   for await (const event of streamAgentTurn({
     config: {
@@ -165,7 +165,7 @@ test('streamAgentTurn rejects images for claude', async () => {
 });
 
 test('streamAgentTurn rejects images for neovate', async () => {
-  const { streamAgentTurn } = await import('../src/providers.mjs');
+  const { streamAgentTurn } = await import('../src/providers.js');
   const events = [];
   for await (const event of streamAgentTurn({
     config: {

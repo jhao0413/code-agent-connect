@@ -1,42 +1,43 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
-import { parseToml } from './toml.mjs';
+import { parseToml } from './toml.js';
 import {
   coerceStringArray,
   expandHomePath,
   isStringArray,
   which,
-} from './utils.mjs';
+} from './utils.js';
+import type { AgentConfig, Config, NetworkConfig } from './types.js';
 
 export const VALID_AGENTS = ['claude', 'codex', 'neovate', 'opencode'];
 
-export function defaultConfigPath() {
+export function defaultConfigPath(): string {
   return expandHomePath(process.env.CAC_CONFIG_PATH || '~/.code-agent-contect/config.toml');
 }
 
-export function defaultStateDir() {
+export function defaultStateDir(): string {
   return expandHomePath(process.env.CAC_STATE_DIR || '~/.local/state/code-agent-connect');
 }
 
-export function defaultSystemdUserDir() {
+export function defaultSystemdUserDir(): string {
   return expandHomePath('~/.config/systemd/user');
 }
 
-export function defaultLaunchAgentDir() {
+export function defaultLaunchAgentDir(): string {
   return expandHomePath('~/Library/LaunchAgents');
 }
 
-export function agentBinEnvName(agent) {
+export function agentBinEnvName(agent: string): string {
   return `CAC_${agent.toUpperCase()}_BIN`;
 }
 
-function normalizeAgentConfig(raw, label) {
-  const value = raw || {};
+function normalizeAgentConfig(raw: unknown, label: string): AgentConfig {
+  const value = (raw || {}) as Record<string, unknown>;
   if (typeof value !== 'object' || Array.isArray(value)) {
     throw new Error(`${label} must be a table`);
   }
-  const extraArgs = value.extra_args ?? [];
+  const extraArgs = (value.extra_args as unknown[]) ?? [];
   if (!Array.isArray(extraArgs)) {
     throw new Error(`${label}.extra_args must be an array`);
   }
@@ -53,8 +54,8 @@ function normalizeAgentConfig(raw, label) {
   };
 }
 
-function normalizeNetworkConfig(raw) {
-  const value = raw || {};
+function normalizeNetworkConfig(raw: unknown): NetworkConfig {
+  const value = (raw || {}) as Record<string, unknown>;
   if (typeof value !== 'object' || Array.isArray(value)) {
     throw new Error('network must be a table');
   }
@@ -72,13 +73,13 @@ function normalizeNetworkConfig(raw) {
   };
 }
 
-export async function loadConfig(configPath = defaultConfigPath()) {
+export async function loadConfig(configPath = defaultConfigPath()): Promise<Config> {
   const raw = await fs.readFile(configPath, 'utf8');
   const parsed = parseToml(raw);
 
-  const telegram = parsed.telegram || {};
-  const bridge = parsed.bridge || {};
-  const agents = parsed.agents || {};
+  const telegram = (parsed.telegram || {}) as Record<string, unknown>;
+  const bridge = (parsed.bridge || {}) as Record<string, unknown>;
+  const agents = (parsed.agents || {}) as Record<string, unknown>;
   const network = parsed.network || {};
 
   if (!telegram.bot_token || typeof telegram.bot_token !== 'string') {
@@ -90,7 +91,7 @@ export async function loadConfig(configPath = defaultConfigPath()) {
   }
 
   const allowedUserIds = coerceStringArray(telegram.allowed_user_ids, 'telegram.allowed_user_ids');
-  const defaultAgent = bridge.default_agent || 'claude';
+  const defaultAgent = (bridge.default_agent as string) || 'claude';
   if (!VALID_AGENTS.includes(defaultAgent)) {
     throw new Error(`bridge.default_agent must be one of: ${VALID_AGENTS.join(', ')}`);
   }
@@ -99,7 +100,7 @@ export async function loadConfig(configPath = defaultConfigPath()) {
     throw new Error('bridge.working_dir is required');
   }
 
-  const enabledAgents = agents.enabled ?? VALID_AGENTS;
+  const enabledAgents = (agents.enabled as string[]) ?? VALID_AGENTS;
   if (!isStringArray(enabledAgents)) {
     throw new Error('agents.enabled must be an array of strings');
   }
@@ -112,10 +113,10 @@ export async function loadConfig(configPath = defaultConfigPath()) {
     throw new Error('bridge.default_agent must be included in agents.enabled');
   }
 
-  const replyChunkChars = Number(bridge.reply_chunk_chars ?? 500);
-  const replyFlushMs = Number(bridge.reply_flush_ms ?? 1500);
-  const pollTimeoutSeconds = Number(bridge.poll_timeout_seconds ?? 30);
-  const maxInputImageMb = Number(bridge.max_input_image_mb ?? 20);
+  const replyChunkChars = Number((bridge.reply_chunk_chars as number) ?? 500);
+  const replyFlushMs = Number((bridge.reply_flush_ms as number) ?? 1500);
+  const pollTimeoutSeconds = Number((bridge.poll_timeout_seconds as number) ?? 30);
+  const maxInputImageMb = Number((bridge.max_input_image_mb as number) ?? 20);
   const allowImageDocuments = bridge.allow_image_documents !== false;
 
   if (!Number.isInteger(replyChunkChars) || replyChunkChars <= 0) {
@@ -160,13 +161,13 @@ export async function loadConfig(configPath = defaultConfigPath()) {
   };
 }
 
-export function resolveAgentBinary(config, agent) {
+export function resolveAgentBinary(config: Config, agent: string): string | null {
   const envOverride = process.env[agentBinEnvName(agent)];
   if (typeof envOverride === 'string' && envOverride.trim()) {
     return expandHomePath(envOverride.trim());
   }
 
-  const configured = config.agents[agent]?.bin;
+  const configured = (config.agents[agent] as AgentConfig)?.bin;
   if (configured) {
     return configured;
   }
@@ -174,7 +175,7 @@ export function resolveAgentBinary(config, agent) {
   return which(agent);
 }
 
-export function applyRuntimeEnvironment(config) {
+export function applyRuntimeEnvironment(config: Config): void {
   if (config.network?.proxyUrl) {
     process.env.HTTP_PROXY = config.network.proxyUrl;
     process.env.HTTPS_PROXY = config.network.proxyUrl;

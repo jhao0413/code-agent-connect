@@ -1,14 +1,15 @@
 #!/usr/bin/env node
 
 import os from 'node:os';
-import { applyRuntimeEnvironment, defaultLaunchAgentDir, defaultStateDir, defaultSystemdUserDir, loadConfig } from './config.mjs';
-import { BridgeService } from './bridge-service.mjs';
-import { StateStore } from './storage.mjs';
-import { runDoctor } from './doctor.mjs';
-import { getLingerStatus, getProjectRoot, installService, isServiceRunning, LAUNCHD_LABEL, restartService, uninstallService } from './service-manager.mjs';
-import { checkForUpdate, formatUpdateNotice, performUpdate } from './updater.mjs';
+import { applyRuntimeEnvironment, defaultLaunchAgentDir, defaultStateDir, defaultSystemdUserDir, loadConfig } from './config.js';
+import { BridgeService } from './bridge-service.js';
+import { StateStore } from './storage.js';
+import { runDoctor } from './doctor.js';
+import { getLingerStatus, getProjectRoot, installService, isServiceRunning, LAUNCHD_LABEL, restartService, uninstallService } from './service-manager.js';
+import { checkForUpdate, formatUpdateNotice, performUpdate } from './updater.js';
+import type { Config } from './types.js';
 
-function printHelp() {
+function printHelp(): void {
   console.log(
     [
       'code-agent-connect',
@@ -24,13 +25,13 @@ function printHelp() {
   );
 }
 
-function parseArguments(argv) {
+function parseArguments(argv: string[]): { filtered: string[]; configPath: string | undefined } {
   const args = [...argv];
-  let configPath;
-  const filtered = [];
+  let configPath: string | undefined;
+  const filtered: string[] = [];
 
   while (args.length > 0) {
-    const current = args.shift();
+    const current = args.shift()!;
     if (current === '--config') {
       configPath = args.shift();
       continue;
@@ -45,7 +46,7 @@ function parseArguments(argv) {
  * Try to load config and apply proxy env vars.
  * Returns the config object if successful, null otherwise (update/check-update can work without config).
  */
-async function tryLoadConfig(configPath) {
+async function tryLoadConfig(configPath: string | undefined): Promise<Config | null> {
   try {
     const config = await loadConfig(configPath);
     applyRuntimeEnvironment(config);
@@ -55,7 +56,7 @@ async function tryLoadConfig(configPath) {
   }
 }
 
-async function main() {
+async function main(): Promise<void> {
   const { filtered, configPath } = parseArguments(process.argv.slice(2));
   const [command = 'help', subcommand] = filtered;
 

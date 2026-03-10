@@ -1,11 +1,12 @@
 import { spawn } from 'node:child_process';
 import { createInterface } from 'node:readline';
-import { resolveAgentBinary } from './config.mjs';
-import { toErrorMessage } from './utils.mjs';
+import { resolveAgentBinary } from './config.js';
+import { toErrorMessage } from './utils.js';
+import type { AgentConfig, AgentEvent, Attachment, CommandSpec, Config, ParserState, StreamAgentTurnParams } from './types.js';
 
-export function parseClaudeLine(line, state = {}) {
+export function parseClaudeLine(line: string, state: ParserState = {}): AgentEvent[] {
   const data = JSON.parse(line);
-  const events = [];
+  const events: AgentEvent[] = [];
 
   if (data.type === 'system' && data.subtype === 'init' && data.session_id) {
     state.sessionId = data.session_id;
@@ -30,8 +31,8 @@ export function parseClaudeLine(line, state = {}) {
 
   if (data.type === 'assistant' && Array.isArray(data.message?.content)) {
     const text = data.message.content
-      .filter((entry) => entry.type === 'text')
-      .map((entry) => entry.text)
+      .filter((entry: { type: string }) => entry.type === 'text')
+      .map((entry: { text: string }) => entry.text)
       .join('');
     if (text) {
       state.assistantText = text;
@@ -45,9 +46,9 @@ export function parseClaudeLine(line, state = {}) {
   return events;
 }
 
-export function parseCodexLine(line, state = {}) {
+export function parseCodexLine(line: string, state: ParserState = {}): AgentEvent[] {
   const data = JSON.parse(line);
-  const events = [];
+  const events: AgentEvent[] = [];
 
   if (data.type === 'thread.started' && data.thread_id) {
     state.sessionId = data.thread_id;
@@ -73,9 +74,9 @@ export function parseCodexLine(line, state = {}) {
   return events;
 }
 
-export function parseNeovateLine(line, state = {}) {
+export function parseNeovateLine(line: string, state: ParserState = {}): AgentEvent[] {
   const data = JSON.parse(line);
-  const events = [];
+  const events: AgentEvent[] = [];
 
   if (data.type === 'system' && data.subtype === 'init' && data.sessionId) {
     state.sessionId = data.sessionId;
@@ -102,9 +103,9 @@ export function parseNeovateLine(line, state = {}) {
   return events;
 }
 
-export function parseOpencodeLine(line, state = {}) {
+export function parseOpencodeLine(line: string, state: ParserState = {}): AgentEvent[] {
   const data = JSON.parse(line);
-  const events = [];
+  const events: AgentEvent[] = [];
 
   if (data.type === 'step_start' && data.sessionID) {
     state.sessionId = data.sessionID;
@@ -131,7 +132,7 @@ export function parseOpencodeLine(line, state = {}) {
   return events;
 }
 
-function getParser(agent) {
+function getParser(agent: string): (line: string, state: ParserState) => AgentEvent[] {
   if (agent === 'claude') {
     return parseClaudeLine;
   }
@@ -147,7 +148,7 @@ function getParser(agent) {
   throw new Error(`Unsupported agent: ${agent}`);
 }
 
-function buildClaudeArgs(agentConfig, prompt, upstreamSessionId) {
+function buildClaudeArgs(agentConfig: AgentConfig, prompt: string, upstreamSessionId: string | null): string[] {
   const args = [
     '-p',
     '--verbose',
@@ -168,7 +169,7 @@ function buildClaudeArgs(agentConfig, prompt, upstreamSessionId) {
   return args;
 }
 
-function buildCodexArgs(agentConfig, prompt, workingDir, upstreamSessionId, attachments = []) {
+function buildCodexArgs(agentConfig: AgentConfig, prompt: string, _workingDir: string, upstreamSessionId: string | null, attachments: Attachment[] = []): string[] {
   const args = ['exec'];
   if (upstreamSessionId) {
     args.push('resume', upstreamSessionId);
@@ -188,7 +189,7 @@ function buildCodexArgs(agentConfig, prompt, workingDir, upstreamSessionId, atta
   return args;
 }
 
-function buildNeovateArgs(agentConfig, prompt, workingDir, upstreamSessionId) {
+function buildNeovateArgs(agentConfig: AgentConfig, prompt: string, workingDir: string, upstreamSessionId: string | null): string[] {
   const args = [
     '-q',
     '--output-format',
@@ -209,7 +210,7 @@ function buildNeovateArgs(agentConfig, prompt, workingDir, upstreamSessionId) {
   return args;
 }
 
-function buildOpencodeArgs(agentConfig, prompt, upstreamSessionId) {
+function buildOpencodeArgs(agentConfig: AgentConfig, prompt: string, upstreamSessionId: string | null): string[] {
   const args = ['run', '--format', 'json'];
   if (agentConfig.model) {
     args.push('--model', agentConfig.model);
@@ -222,13 +223,13 @@ function buildOpencodeArgs(agentConfig, prompt, upstreamSessionId) {
   return args;
 }
 
-export function buildCommandSpec(config, agent, prompt, workingDir, upstreamSessionId, attachments = []) {
+export function buildCommandSpec(config: Config, agent: string, prompt: string, workingDir: string, upstreamSessionId: string | null, attachments: Attachment[] = []): CommandSpec {
   const command = resolveAgentBinary(config, agent);
   if (!command) {
     throw new Error(`Cannot resolve ${agent} binary`);
   }
 
-  const agentConfig = config.agents[agent];
+  const agentConfig = config.agents[agent] as AgentConfig;
   if (agent === 'claude') {
     return { command, args: buildClaudeArgs(agentConfig, prompt, upstreamSessionId), cwd: workingDir };
   }
@@ -246,7 +247,7 @@ export function buildCommandSpec(config, agent, prompt, workingDir, upstreamSess
 
 const IMAGE_UNSUPPORTED_AGENTS = new Set(['claude', 'neovate', 'opencode']);
 
-export async function* streamAgentTurn({ config, agent, prompt, attachments = [], workingDir, upstreamSessionId }) {
+export async function* streamAgentTurn({ config, agent, prompt, attachments = [], workingDir, upstreamSessionId }: StreamAgentTurnParams): AsyncGenerator<AgentEvent> {
   const hasImages = attachments.length > 0 && attachments.some((a) => a.kind === 'image');
 
   if (hasImages && IMAGE_UNSUPPORTED_AGENTS.has(agent)) {
@@ -259,7 +260,7 @@ export async function* streamAgentTurn({ config, agent, prompt, attachments = []
 
   const spec = buildCommandSpec(config, agent, prompt, workingDir, upstreamSessionId, attachments);
   const parser = getParser(agent);
-  const parserState = {};
+  const parserState: ParserState = {};
 
   const child = spawn(spec.command, spec.args, {
     cwd: spec.cwd,
@@ -268,13 +269,13 @@ export async function* streamAgentTurn({ config, agent, prompt, attachments = []
   });
 
   let stderr = '';
-  child.stderr.on('data', (chunk) => {
+  child.stderr.on('data', (chunk: Buffer) => {
     stderr += chunk.toString();
   });
 
-  const closePromise = new Promise((resolve, reject) => {
+  const closePromise = new Promise<number>((resolve, reject) => {
     child.once('error', reject);
-    child.once('close', (code) => resolve(code ?? 0));
+    child.once('close', (code: number | null) => resolve(code ?? 0));
   });
 
   const lines = createInterface({
@@ -287,7 +288,7 @@ export async function* streamAgentTurn({ config, agent, prompt, attachments = []
       if (!line.trim()) {
         continue;
       }
-      let parsedEvents;
+      let parsedEvents: AgentEvent[];
       try {
         parsedEvents = parser(line, parserState);
       } catch (error) {

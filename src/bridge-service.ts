@@ -1,16 +1,18 @@
 import fs from 'node:fs/promises';
 import crypto from 'node:crypto';
 import path from 'node:path';
-import { markdownToTelegramHtml } from './markdown.mjs';
-import { streamAgentTurn } from './providers.mjs';
-import { TelegramClient } from './telegram-client.mjs';
-import { chunkText, expandHomePath, sleep, toErrorMessage } from './utils.mjs';
+import { markdownToTelegramHtml } from './markdown.js';
+import { streamAgentTurn } from './providers.js';
+import { TelegramClient } from './telegram-client.js';
+import { chunkText, expandHomePath, sleep, toErrorMessage } from './utils.js';
+import type { Attachment, AgentEvent, Config, ImageInfo, Session, StreamAgentTurnParams, TelegramCommand } from './types.js';
+import type { StateStore } from './storage.js';
 
-function stripBotSuffix(command) {
+function stripBotSuffix(command: string): string {
   return command.replace(/@.+$/u, '');
 }
 
-function parseCommandText(text) {
+function parseCommandText(text: string): { rawCommand: string; rawArgs: string } {
   const match = text.trim().match(/^(\S+)(?:\s+([\s\S]*))?$/u);
   return {
     rawCommand: match?.[1] || text.trim(),
@@ -18,7 +20,7 @@ function parseCommandText(text) {
   };
 }
 
-function unwrapQuotedArg(value) {
+function unwrapQuotedArg(value: string): string {
   const trimmed = value.trim();
   if (trimmed.length >= 2) {
     const quote = trimmed[0];
@@ -29,8 +31,8 @@ function unwrapQuotedArg(value) {
   return trimmed;
 }
 
-function mimeToExt(mimeType) {
-  const map = {
+function mimeToExt(mimeType: string): string {
+  const map: Record<string, string> = {
     'image/png': '.png',
     'image/jpeg': '.jpg',
     'image/webp': '.webp',
@@ -39,17 +41,19 @@ function mimeToExt(mimeType) {
   return map[mimeType] || '.bin';
 }
 
-function normalizeSessionState(session) {
+function normalizeSessionState(session: Session): Session {
   session.providerSessionIds = {
     claude: null,
     codex: null,
     neovate: null,
+    opencode: null,
     ...(session.providerSessionIds || {}),
   };
   session.providerWorkingDirs = {
     claude: null,
     codex: null,
     neovate: null,
+    opencode: null,
     ...(session.providerWorkingDirs || {}),
   };
   return session;
@@ -64,11 +68,32 @@ const ALLOWED_IMAGE_MIMES = new Set([
 
 const DEFAULT_IMAGE_PROMPT = 'Please analyze the attached image and explain what you see.';
 
+interface TelegramMessage {
+  chat?: { id: number; type: string };
+  from?: { id: number };
+  text?: string;
+  caption?: string;
+  photo?: Array<{ file_id: string; file_size?: number; width: number; height: number }>;
+  document?: { file_id: string; mime_type?: string; file_size?: number; file_name?: string };
+  media_group_id?: string;
+  sticker?: unknown;
+  animation?: unknown;
+  video?: unknown;
+  voice?: unknown;
+  video_note?: unknown;
+  audio?: unknown;
+}
+
+interface TelegramUpdate {
+  update_id: number;
+  message?: TelegramMessage;
+}
+
 /**
  * Extract image info from a Telegram message, if any.
  * Returns { fileId, mimeType, fileSize, width, height, sourceName } or null.
  */
-export function extractImageInfo(message) {
+export function extractImageInfo(message: TelegramMessage): ImageInfo | null {
   // Photo array: pick the largest resolution
   if (Array.isArray(message.photo) && message.photo.length > 0) {
     const largest = message.photo.reduce((a, b) =>
@@ -106,7 +131,7 @@ export function extractImageInfo(message) {
  * Determine if a message contains unsupported media that should be rejected.
  * Returns a rejection message string, or null if the message is acceptable.
  */
-export function getUnsupportedMediaRejection(message) {
+export function getUnsupportedMediaRejection(message: TelegramMessage): string | null {
   if (message.media_group_id) {
     return 'Album (multi-image) messages are not supported yet. Please send images one at a time.';
   }
@@ -134,7 +159,7 @@ export function getUnsupportedMediaRejection(message) {
   return null;
 }
 
-function buildHelpText(config) {
+function buildHelpText(config: Config): string {
   return [
     'code-agent-connect',
     '',
@@ -156,7 +181,7 @@ function buildHelpText(config) {
   ].join('\n');
 }
 
-export function buildTelegramCommands(config) {
+export function buildTelegramCommands(config: Config): TelegramCommand[] {
   return [
     {
       command: 'start',
@@ -185,8 +210,20 @@ export function buildTelegramCommands(config) {
   ];
 }
 
+export interface BridgeServiceOptions {
+  streamAgentTurnImpl?: (params: StreamAgentTurnParams) => AsyncGenerator<AgentEvent>;
+  typingIntervalMs?: number;
+  fetchImpl?: typeof globalThis.fetch;
+}
+
 export class BridgeService {
-  constructor(config, store, options = {}) {
+  config: Config;
+  store: StateStore;
+  streamAgentTurnImpl: (params: StreamAgentTurnParams) => AsyncGenerator<AgentEvent>;
+  typingIntervalMs: number;
+  telegram: TelegramClient;
+
+  constructor(config: Config, store: StateStore, options: BridgeServiceOptions = {}) {
     this.config = config;
     this.store = store;
     this.streamAgentTurnImpl = options.streamAgentTurnImpl || streamAgentTurn;
@@ -197,7 +234,7 @@ export class BridgeService {
     });
   }
 
-  async sendText(chatId, text) {
+  async sendText(chatId: number | string, text: string): Promise<void> {
     for (const chunk of chunkText(text, 3500)) {
       const html = markdownToTelegramHtml(chunk);
       try {
@@ -208,11 +245,11 @@ export class BridgeService {
     }
   }
 
-  getSessionWorkingDir(session) {
+  getSessionWorkingDir(session: Session): string {
     return session.workingDir || this.config.bridge.workingDir;
   }
 
-  async preparePromptSession(session, agent) {
+  async preparePromptSession(session: Session, agent: string): Promise<{ session: Session; workingDir: string; upstreamSessionId: string | null }> {
     const workingDir = this.getSessionWorkingDir(session);
     const providerWorkingDir = session.providerWorkingDirs[agent];
     let upstreamSessionId = session.providerSessionIds[agent];
@@ -231,7 +268,7 @@ export class BridgeService {
     };
   }
 
-  async resolveWorkingDir(session, rawPath) {
+  async resolveWorkingDir(session: Session, rawPath: string): Promise<string> {
     const baseDir = this.getSessionWorkingDir(session);
     const expanded = expandHomePath(rawPath);
     const candidate = path.isAbsolute(expanded)
@@ -245,11 +282,11 @@ export class BridgeService {
     return resolved;
   }
 
-  attachmentsDir() {
+  attachmentsDir(): string {
     return path.join(this.config.stateDir, 'attachments');
   }
 
-  async downloadAttachment(imageInfo) {
+  async downloadAttachment(imageInfo: ImageInfo): Promise<Attachment> {
     const fileResult = await this.telegram.getFile(imageInfo.fileId);
     if (!fileResult.file_path) {
       throw new Error('Telegram getFile returned no file_path');
@@ -283,7 +320,7 @@ export class BridgeService {
     };
   }
 
-  async cleanupAttachments(attachments) {
+  async cleanupAttachments(attachments: Attachment[]): Promise<void> {
     for (const att of attachments) {
       if (att.localDir) {
         try {
@@ -295,18 +332,18 @@ export class BridgeService {
     }
   }
 
-  async run() {
+  async run(): Promise<void> {
     await this.store.init();
     await this.syncTelegramCommands();
     let offset = this.store.getTelegramOffset();
 
     while (true) {
-      let updates = [];
+      let updates: TelegramUpdate[] = [];
       try {
         updates = await this.telegram.getUpdates({
           offset,
           timeoutSeconds: this.config.bridge.pollTimeoutSeconds,
-        });
+        }) as TelegramUpdate[];
       } catch (error) {
         console.error('[bridge] Telegram polling failed:', toErrorMessage(error));
         await sleep(2000);
@@ -321,7 +358,7 @@ export class BridgeService {
     }
   }
 
-  async syncTelegramCommands() {
+  async syncTelegramCommands(): Promise<void> {
     try {
       await this.telegram.setMyCommands(buildTelegramCommands(this.config));
       console.log('[bridge] Telegram bot commands synced');
@@ -330,14 +367,14 @@ export class BridgeService {
     }
   }
 
-  async handleUpdate(update) {
+  async handleUpdate(update: TelegramUpdate): Promise<void> {
     const message = update.message;
     if (!message || message.chat?.type !== 'private') {
       return;
     }
 
     const userId = String(message.from?.id || '');
-    const chatId = message.chat.id;
+    const chatId = message.chat!.id;
     if (!userId || !chatId) {
       return;
     }
@@ -378,7 +415,7 @@ export class BridgeService {
     }
 
     // Build attachment if we have an image
-    let attachments = [];
+    let attachments: Attachment[] = [];
     if (imageInfo) {
       const maxMb = this.config.bridge.maxInputImageMb ?? 20;
       const maxBytes = maxMb * 1024 * 1024;
@@ -415,7 +452,7 @@ export class BridgeService {
     await this.handlePrompt(chatId, session, prompt, attachments);
   }
 
-  async handleCommand(chatId, userId, session, text) {
+  async handleCommand(chatId: number | string, userId: string, session: Session, text: string): Promise<void> {
     normalizeSessionState(session);
     const { rawCommand, rawArgs } = parseCommandText(text);
     const command = stripBotSuffix(rawCommand);
@@ -501,7 +538,7 @@ export class BridgeService {
     await this.sendText(chatId, 'Unknown command. Send /help for the supported commands.');
   }
 
-  async handlePrompt(chatId, session, prompt, attachments = []) {
+  async handlePrompt(chatId: number | string, session: Session, prompt: string, attachments: Attachment[] = []): Promise<void> {
     normalizeSessionState(session);
     await this.store.appendTranscript(session.id, {
       direction: 'in',
@@ -526,10 +563,10 @@ export class BridgeService {
     let finalText = '';
     let sentLength = 0;
     let lastFlushAt = Date.now();
-    const errors = [];
+    const errors: string[] = [];
     let typingActive = true;
 
-    const sendTyping = async () => {
+    const sendTyping = async (): Promise<void> => {
       if (!typingActive) {
         return;
       }
@@ -540,7 +577,7 @@ export class BridgeService {
       }
     };
 
-    const flush = async ({ force = false } = {}) => {
+    const flush = async ({ force = false } = {}): Promise<void> => {
       const unsentLength = aggregateText.length - sentLength;
       if (unsentLength <= 0) {
         return;
@@ -561,7 +598,7 @@ export class BridgeService {
     };
 
     let flushChain = Promise.resolve();
-    const queueFlush = (options = {}) => {
+    const queueFlush = (options: { force?: boolean } = {}): Promise<void> => {
       flushChain = flushChain
         .then(() => flush(options))
         .catch((error) => {

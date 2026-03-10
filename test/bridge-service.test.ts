@@ -3,9 +3,9 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { buildTelegramCommands } from '../src/bridge-service.mjs';
-import { BridgeService } from '../src/bridge-service.mjs';
-import { StateStore } from '../src/storage.mjs';
+import { buildTelegramCommands } from '../src/bridge-service.js';
+import { BridgeService } from '../src/bridge-service.js';
+import { StateStore } from '../src/storage.js';
 
 test('buildTelegramCommands exposes the Telegram menu entries', () => {
   const commands = buildTelegramCommands({

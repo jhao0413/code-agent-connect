@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { BridgeService } from '../src/bridge-service.mjs';
+import { BridgeService } from '../src/bridge-service.js';
 
 function createConfig() {
   return {

@@ -1,12 +1,17 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { pipeline } from 'node:stream/promises';
-import { runCommand } from './utils.mjs';
+import { runCommand } from './utils.js';
+import type { TelegramClientOptions, TelegramCommand } from './types.js';
 
 const TELEGRAM_MAX_LENGTH = 4096;
 
 export class TelegramClient {
-  constructor(botToken, options = {}) {
+  baseUrl: string;
+  fetchImpl: typeof globalThis.fetch;
+  proxyUrl: string | undefined;
+
+  constructor(botToken: string, options: TelegramClientOptions = {}) {
     if (!botToken) {
       throw new Error('Telegram bot token is required');
     }
@@ -19,14 +24,14 @@ export class TelegramClient {
     this.proxyUrl = options.proxyUrl;
   }
 
-  async call(method, payload = {}) {
+  async call(method: string, payload: Record<string, unknown> = {}): Promise<unknown> {
     if (this.proxyUrl) {
       return this.callWithCurl(method, payload);
     }
     return this.callWithFetch(method, payload);
   }
 
-  async callWithFetch(method, payload = {}) {
+  async callWithFetch(method: string, payload: Record<string, unknown> = {}): Promise<unknown> {
     const response = await this.fetchImpl(`${this.baseUrl}/${method}`, {
       method: 'POST',
       headers: {
@@ -39,21 +44,21 @@ export class TelegramClient {
       throw new Error(`Telegram API ${method} failed with status ${response.status}`);
     }
 
-    const body = await response.json();
+    const body = await response.json() as { ok: boolean; result: unknown; description?: string };
     if (!body.ok) {
       throw new Error(`Telegram API ${method} error: ${body.description || 'unknown error'}`);
     }
     return body.result;
   }
 
-  async callWithCurl(method, payload = {}) {
-    const timeoutSeconds = Math.max(10, Number(payload.timeout || 0) + 10);
+  async callWithCurl(method: string, payload: Record<string, unknown> = {}): Promise<unknown> {
+    const timeoutSeconds = Math.max(10, Number((payload.timeout as number) || 0) + 10);
     const args = [
       '-sS',
       '--max-time',
       String(timeoutSeconds),
       '--proxy',
-      this.proxyUrl,
+      this.proxyUrl!,
       '-H',
       'content-type: application/json',
       '-X',
@@ -68,7 +73,7 @@ export class TelegramClient {
       throw new Error(result.stderr.trim() || `curl ${method} failed with code ${result.code}`);
     }
 
-    let body;
+    let body: { ok: boolean; result: unknown; description?: string };
     try {
       body = JSON.parse(result.stdout);
     } catch {
@@ -81,19 +86,19 @@ export class TelegramClient {
     return body.result;
   }
 
-  async getMe() {
+  async getMe(): Promise<unknown> {
     return this.call('getMe');
   }
 
-  async getUpdates({ offset, timeoutSeconds }) {
+  async getUpdates({ offset, timeoutSeconds }: { offset: number; timeoutSeconds: number }): Promise<unknown[]> {
     return this.call('getUpdates', {
       offset,
       timeout: timeoutSeconds,
       allowed_updates: ['message'],
-    });
+    }) as Promise<unknown[]>;
   }
 
-  async setMyCommands(commands) {
+  async setMyCommands(commands: TelegramCommand[]): Promise<unknown> {
     if (!Array.isArray(commands)) {
       throw new Error('setMyCommands requires an array of commands');
     }
@@ -105,23 +110,23 @@ export class TelegramClient {
     });
   }
 
-  async sendChatAction(chatId, action = 'typing') {
+  async sendChatAction(chatId: number | string, action = 'typing'): Promise<unknown> {
     return this.call('sendChatAction', {
       chat_id: chatId,
       action,
     });
   }
 
-  get fileBaseUrl() {
+  get fileBaseUrl(): string {
     // File downloads use https://api.telegram.org/file/bot<token>/
     return this.baseUrl.replace('/bot', '/file/bot');
   }
 
-  async getFile(fileId) {
-    return this.call('getFile', { file_id: fileId });
+  async getFile(fileId: string): Promise<{ file_path?: string }> {
+    return this.call('getFile', { file_id: fileId }) as Promise<{ file_path?: string }>;
   }
 
-  async downloadFile(filePath, destinationPath) {
+  async downloadFile(filePath: string, destinationPath: string): Promise<void> {
     const url = `${this.fileBaseUrl}/${filePath}`;
     await fs.mkdir(path.dirname(destinationPath), { recursive: true });
 
@@ -131,24 +136,24 @@ export class TelegramClient {
     return this.downloadFileWithFetch(url, destinationPath);
   }
 
-  async downloadFileWithFetch(url, destinationPath) {
+  async downloadFileWithFetch(url: string, destinationPath: string): Promise<void> {
     const response = await this.fetchImpl(url);
     if (!response.ok) {
       throw new Error(`Telegram file download failed with status ${response.status}`);
     }
     const fileHandle = await fs.open(destinationPath, 'w');
     try {
-      await pipeline(response.body, fileHandle.createWriteStream());
+      await pipeline(response.body as unknown as NodeJS.ReadableStream, fileHandle.createWriteStream());
     } finally {
       await fileHandle.close();
     }
   }
 
-  async downloadFileWithCurl(url, destinationPath) {
+  async downloadFileWithCurl(url: string, destinationPath: string): Promise<void> {
     const args = [
       '-sS',
       '--max-time', '120',
-      '--proxy', this.proxyUrl,
+      '--proxy', this.proxyUrl!,
       '-o', destinationPath,
       url,
     ];
@@ -158,7 +163,7 @@ export class TelegramClient {
     }
   }
 
-  async sendMessage(chatId, text, { parseMode } = {}) {
+  async sendMessage(chatId: number | string, text: string, { parseMode }: { parseMode?: string } = {}): Promise<unknown> {
     if (!text || !text.trim()) {
       return null;
     }

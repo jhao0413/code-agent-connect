@@ -4,7 +4,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { checkForUpdate, formatUpdateNotice, performUpdate } from '../src/updater.mjs';
+import { checkForUpdate, formatUpdateNotice, performUpdate } from '../src/updater.js';
 
 /** Create a minimal git repo in a temp directory and return its path. */
 async function createTempRepo({ branch = 'main', dirty = false } = {}) {
