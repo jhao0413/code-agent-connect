@@ -47,7 +47,7 @@ export function renderServiceUnit({ config, projectRoot, nodePath, resolvedBins,
     );
   }
 
-  const distCliPath = path.join(projectRoot, 'dist', 'cli.js');
+  const distCliPath = path.posix.join(projectRoot.replaceAll('\\', '/'), 'dist', 'cli.js');
   const execStart = [nodePath, distCliPath, 'serve', '--config', config.configPath]
     .map((value) => quoteExecArg(value))
     .join(' ');
@@ -91,6 +91,11 @@ export async function getLingerStatus(username = os.userInfo().username): Promis
 }
 
 export async function installService(config: Config): Promise<{ unitPath?: string; plistPath?: string }> {
+  if (os.platform() === 'win32') {
+    throw new Error(
+      'Service management is not supported on Windows. Run `code-agent-connect serve` manually, or use a third-party tool such as pm2 or NSSM.',
+    );
+  }
   if (os.platform() === 'darwin') {
     return installLaunchAgent(config);
   }
@@ -139,6 +144,11 @@ export async function installService(config: Config): Promise<{ unitPath?: strin
 }
 
 export async function uninstallService(config: { systemdUserDir?: string; launchAgentDir?: string }): Promise<void> {
+  if (os.platform() === 'win32') {
+    throw new Error(
+      'Service management is not supported on Windows. Run `code-agent-connect serve` manually, or use a third-party tool such as pm2 or NSSM.',
+    );
+  }
   if (os.platform() === 'darwin') {
     return uninstallLaunchAgent(config as { launchAgentDir: string });
   }
@@ -257,6 +267,11 @@ export async function uninstallLaunchAgent(config: { launchAgentDir: string }): 
 }
 
 export async function isServiceRunning(): Promise<boolean> {
+  if (os.platform() === 'win32') {
+    throw new Error(
+      'Service management is not supported on Windows. Run `code-agent-connect serve` manually, or use a third-party tool such as pm2 or NSSM.',
+    );
+  }
   if (os.platform() === 'darwin') {
     const result = await runCommand('launchctl', ['list', LAUNCHD_LABEL]);
     return result.code === 0 && /^\s*"PID"\s*=\s*\d+/m.test(result.stdout);
@@ -266,6 +281,11 @@ export async function isServiceRunning(): Promise<boolean> {
 }
 
 export async function restartService(): Promise<void> {
+  if (os.platform() === 'win32') {
+    throw new Error(
+      'Service management is not supported on Windows. Run `code-agent-connect serve` manually, or use a third-party tool such as pm2 or NSSM.',
+    );
+  }
   if (os.platform() === 'darwin') {
     const plistPath = path.join(defaultLaunchAgentDirFn(), `${LAUNCHD_LABEL}.plist`);
     await runCommand('launchctl', ['unload', plistPath]);

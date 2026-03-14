@@ -40,7 +40,7 @@ sudo loginctl enable-linger "$USER"
 
 ## Requirements
 
-- macOS or Linux
+- macOS, Linux, or Windows 10/11
 - Node.js 20+
 - Telegram bot token
 - Installed local CLIs:
@@ -49,7 +49,7 @@ sudo loginctl enable-linger "$USER"
   - `neovate`
   - `opencode`
 
-Windows is not supported at the moment.
+> **Windows note**: `serve`, `doctor`, `setup`, `update`, and `check-update` all work natively on Windows 10/11 with Node.js 20+. The `service install/uninstall` commands are not supported — run `node dist/cli.js serve` directly, or use a third-party process manager such as [pm2](https://pm2.keymetrics.io/) or [NSSM](https://nssm.cc/) for auto-start.
 
 ## Configure
 

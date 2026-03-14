@@ -17,7 +17,12 @@ export function defaultConfigPath(): string {
 }
 
 export function defaultStateDir(): string {
-  return expandHomePath(process.env.CAC_STATE_DIR || '~/.local/state/code-agent-connect');
+  if (process.env.CAC_STATE_DIR) return expandHomePath(process.env.CAC_STATE_DIR);
+  if (os.platform() === 'win32') {
+    const localAppData = process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local');
+    return path.join(localAppData, 'code-agent-connect');
+  }
+  return expandHomePath('~/.local/state/code-agent-connect');
 }
 
 export function defaultSystemdUserDir(): string {

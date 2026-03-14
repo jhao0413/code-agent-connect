@@ -67,6 +67,8 @@ export async function runDoctor(config: Config): Promise<CheckResult> {
       const hasPid = /^\s*"PID"\s*=/m.test(launchctlList.stdout);
       push(hasPid, 'Service is running', hasPid ? 'running' : 'not running');
     }
+  } else if (os.platform() === 'win32') {
+    lines.push('[INFO] Service management is not supported on Windows. Run `serve` manually, or use pm2/NSSM for auto-start.');
   } else {
     const systemctlVersion = await runCommand('systemctl', ['--user', '--version']);
     push(systemctlVersion.code === 0, 'systemd user service is available', systemctlVersion.code === 0 ? 'systemctl --user' : systemctlVersion.stderr.trim());

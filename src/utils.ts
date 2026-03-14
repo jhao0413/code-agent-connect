@@ -121,7 +121,11 @@ export async function fileExists(filePath: string): Promise<boolean> {
 
 export function isExecutable(filePath: string): boolean {
   try {
-    fssync.accessSync(filePath, fssync.constants.X_OK);
+    if (os.platform() === 'win32') {
+      fssync.accessSync(filePath, fssync.constants.F_OK);
+    } else {
+      fssync.accessSync(filePath, fssync.constants.X_OK);
+    }
     return true;
   } catch {
     return false;
@@ -132,17 +136,34 @@ export function which(command: string, envPath = process.env.PATH || ''): string
   if (!command) {
     return null;
   }
+  const extensions =
+    os.platform() === 'win32'
+      ? (process.env.PATHEXT || '.COM;.EXE;.BAT;.CMD').split(';').filter(Boolean)
+      : [''];
   if (path.isAbsolute(command)) {
-    return isExecutable(command) ? command : null;
+    if (isExecutable(command)) return command;
+    for (const ext of extensions) {
+      if (isExecutable(command + ext)) return command + ext;
+    }
+    return null;
   }
   const pathEntries = envPath.split(path.delimiter).filter(Boolean);
   for (const entry of pathEntries) {
-    const candidate = path.join(entry, command);
-    if (isExecutable(candidate)) {
-      return candidate;
+    for (const ext of extensions) {
+      const candidate = path.join(entry, command + ext);
+      if (isExecutable(candidate)) {
+        return candidate;
+      }
     }
   }
   return null;
+}
+
+export function normalizeSpawn(command: string, args: string[]): [string, string[]] {
+  if (os.platform() === 'win32' && /\.(cmd|bat)$/i.test(command)) {
+    return ['cmd.exe', ['/c', command, ...args]];
+  }
+  return [command, args];
 }
 
 export async function isWritableDirectory(dirPath: string): Promise<boolean> {

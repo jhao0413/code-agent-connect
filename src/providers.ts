@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process';
 import { createInterface } from 'node:readline';
 import { resolveAgentBinary } from './config.js';
-import { toErrorMessage } from './utils.js';
+import { normalizeSpawn, toErrorMessage } from './utils.js';
 import type { AgentConfig, AgentEvent, Attachment, CommandSpec, Config, ParserState, StreamAgentTurnParams } from './types.js';
 
 export function parseClaudeLine(line: string, state: ParserState = {}): AgentEvent[] {
@@ -262,7 +262,8 @@ export async function* streamAgentTurn({ config, agent, prompt, attachments = []
   const parser = getParser(agent);
   const parserState: ParserState = {};
 
-  const child = spawn(spec.command, spec.args, {
+  const [spawnCmd, spawnArgs] = normalizeSpawn(spec.command, spec.args);
+  const child = spawn(spawnCmd, spawnArgs, {
     cwd: spec.cwd,
     env: process.env,
     stdio: ['ignore', 'pipe', 'pipe'],

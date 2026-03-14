@@ -1,10 +1,13 @@
+import os from 'node:os';
 import { VALID_AGENTS, defaultConfigPath } from './config.js';
 import { fileExists, which, writeFileAtomic } from './utils.js';
 import { Prompt } from './prompt.js';
 import { generateConfigToml, type ConfigData } from './toml-writer.js';
 
 const INSTALL_HINTS: Record<string, string> = {
-  claude: 'curl -fsSL https://claude.ai/install.sh | bash',
+  claude: os.platform() === 'win32'
+    ? 'https://claude.ai/download  (or: npm install -g @anthropic-ai/claude-code)'
+    : 'curl -fsSL https://claude.ai/install.sh | bash',
   codex: 'npm install -g @openai/codex',
   neovate: 'npm i @neovate/code -g',
   opencode: 'npm i -g opencode-ai',
