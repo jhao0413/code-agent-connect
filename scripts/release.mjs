@@ -1,10 +1,12 @@
 #!/usr/bin/env node
 
 /**
- * Release script: bump version, commit, tag, and push.
+ * Release script: bump version, commit, tag, push, and create GitHub Release.
  *
  * Usage: node scripts/release.mjs <version>
  * Example: node scripts/release.mjs 0.2.0
+ *
+ * Requires: gh CLI (https://cli.github.com/) installed and authenticated.
  */
 
 import fs from 'node:fs/promises';
@@ -49,6 +51,9 @@ async function main() {
 
   // Push
   run('git', ['push', 'origin', 'main', '--tags']);
+
+  // Create GitHub Release
+  run('gh', ['release', 'create', tag, '--title', tag, '--generate-notes']);
 
   console.log(`\nReleased ${tag}`);
 }
