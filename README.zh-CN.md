@@ -26,6 +26,27 @@ code-agent-connect service install
 sudo loginctl enable-linger "$USER"
 ```
 
+## 支持情况与计划
+
+### 当前支持
+
+| 功能 | claude | codex | neovate | opencode |
+|------|--------|-------|---------|----------|
+| 文本输入 | ✅ | ✅ | ✅ | ✅ |
+| 图片输入 | ❌ | ✅ | ❌ | ❌ |
+| 新开会话（`/new`） | ✅ | ✅ | ✅ | ✅ |
+| 切换 agent（`/use`） | ✅ | ✅ | ✅ | ✅ |
+| 设置工作目录（`/set_working_dir`） | ✅ | ✅ | ✅ | ✅ |
+| 查看会话信息（`/status`） | ✅ | ✅ | ✅ | ✅ |
+
+图片输入（在 Telegram 中发送图片）目前仅 `codex` 支持，其他 agent 暂不接受图片消息。
+
+### 后续计划
+
+- **更多 agent** — 随着其他 code agent CLI 成熟，持续扩展支持
+- **交互式提示** — 将 agent 端的 `askUserQuestion` 调用透传回 Telegram，让你直接在对话中回应 agent 的选择，无需切回终端
+- **模型切换** — 提供 Telegram 命令，用于查看和切换当前 agent 会话所使用的模型
+
 ## 功能范围
 
 - 仅支持 Telegram 私聊
@@ -33,7 +54,7 @@ sudo loginctl enable-linger "$USER"
 - 四个本地 agent：`claude`、`codex`、`neovate`、`opencode`
 - macOS、Linux、Windows 上均支持前台 `serve` 模式
 - Linux 上通过 `systemd --user`、macOS 上通过 `launchd` 实现自动重启和开机自启
-- 不支持 webhook、群聊、图片/文件输入、Telegram 端权限按钮
+- 不支持 webhook、群聊、Telegram 端权限按钮
 
 ## 环境要求
 

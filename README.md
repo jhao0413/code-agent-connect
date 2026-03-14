@@ -26,6 +26,27 @@ code-agent-connect service install
 sudo loginctl enable-linger "$USER"
 ```
 
+## Status & Roadmap
+
+### Current support
+
+| Feature | claude | codex | neovate | opencode |
+|---------|--------|-------|---------|----------|
+| Text input | ✅ | ✅ | ✅ | ✅ |
+| Image input | ❌ | ✅ | ❌ | ❌ |
+| New session (`/new`) | ✅ | ✅ | ✅ | ✅ |
+| Switch agent (`/use`) | ✅ | ✅ | ✅ | ✅ |
+| Set working dir (`/set_working_dir`) | ✅ | ✅ | ✅ | ✅ |
+| View session info (`/status`) | ✅ | ✅ | ✅ | ✅ |
+
+Image input (sending a photo in Telegram) is currently only supported by `codex`. Other agents do not yet accept image messages.
+
+### Planned
+
+- **More agents** — support additional code agent CLIs as they mature
+- **Interactive prompts** — surface agent-side `askUserQuestion` calls back to Telegram so you can respond to agent choices without touching the terminal
+- **Model switching** — a Telegram command to list and switch the active model for the current agent session
+
 ## Scope
 
 - Telegram private chat only
@@ -33,7 +54,7 @@ sudo loginctl enable-linger "$USER"
 - Four local agents: `claude`, `codex`, `neovate`, `opencode`
 - Foreground `serve` runtime on macOS, Linux, and Windows
 - `systemd --user` on Linux and `launchd` on macOS for restart and boot-time startup
-- No webhook, no group chat, no image/file input, no Telegram-side permission buttons
+- No webhook, no group chat, no Telegram-side permission buttons
 
 ## Requirements
 
