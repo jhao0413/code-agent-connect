@@ -1,11 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import os from 'node:os';
+import path from 'node:path';
 import {
   buildCommandSpec,
   parseClaudeLine,
   parseCodexLine,
   parseNeovateLine,
   parseOpencodeLine,
+  streamAgentTurn,
 } from '../src/providers.js';
 
 test('parseClaudeLine handles real stream-json output', () => {
@@ -144,4 +147,32 @@ test('buildCommandSpec builds correct opencode args', () => {
 
   const fresh = buildCommandSpec(config, 'opencode', 'prompt', '/tmp/work', null);
   assert.deepEqual(fresh.args, ['run', '--format', 'json', '--model', 'anthropic/claude-sonnet', '--verbose', 'prompt']);
+});
+
+test('streamAgentTurn turns synchronous spawn failures into error events', async () => {
+  const config = {
+    agents: {
+      enabled: ['claude'],
+      claude: { bin: process.execPath, model: undefined, extraArgs: [] },
+      codex: { bin: undefined, model: undefined, extraArgs: [] },
+      neovate: { bin: undefined, model: undefined, extraArgs: [] },
+      opencode: { bin: undefined, model: undefined, extraArgs: [] },
+    },
+  };
+  const missingDir = path.join(os.tmpdir(), `cac-missing-${Date.now()}-${Math.random().toString(16).slice(2)}`);
+  const events = [];
+
+  for await (const event of streamAgentTurn({
+    config: config as never,
+    agent: 'claude',
+    prompt: 'hi',
+    workingDir: missingDir,
+    upstreamSessionId: null,
+  })) {
+    events.push(event);
+  }
+
+  assert.equal(events.length, 1);
+  assert.equal(events[0].type, 'error');
+  assert.match(events[0].message || '', /(ENOENT|execution failed|spawn)/);
 });

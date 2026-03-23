@@ -1,4 +1,5 @@
 export type AgentName = 'claude' | 'codex' | 'neovate' | 'opencode';
+export type PlatformName = 'telegram' | 'weixin';
 
 export interface AgentConfig {
   bin: string | undefined;
@@ -11,14 +12,29 @@ export interface NetworkConfig {
   noProxy: string | undefined;
 }
 
+export interface TelegramPlatformConfig {
+  enabled: boolean;
+  botToken: string;
+  allowedUserIds: string[];
+}
+
+export interface WeixinPlatformConfig {
+  enabled: boolean;
+  channelVersion: string;
+  baseUrl: string | undefined;
+  skRouteTag: string | undefined;
+}
+
 export interface Config {
   configPath: string;
   stateDir: string;
   systemdUserDir: string;
   launchAgentDir?: string;
-  telegram: {
-    botToken: string;
-    allowedUserIds: string[];
+  telegram: TelegramPlatformConfig;
+  weixin: WeixinPlatformConfig;
+  platforms: {
+    telegram: TelegramPlatformConfig;
+    weixin: WeixinPlatformConfig;
   };
   bridge: {
     defaultAgent: string;
@@ -42,7 +58,9 @@ export interface Config {
 
 export interface Session {
   id: string;
+  userId?: string;
   telegramUserId: string;
+  platform?: PlatformName;
   activeAgent: string;
   workingDir: string | null;
   providerSessionIds: Record<string, string | null>;
@@ -53,6 +71,24 @@ export interface Session {
 
 export interface TelegramState {
   offset: number;
+}
+
+export interface WeixinCredential {
+  token: string;
+  baseUrl: string;
+  accountId: string;
+  userId: string;
+  savedAt: string;
+}
+
+export interface WeixinCursorState {
+  getUpdatesBuf: string;
+  longpollingTimeoutMs?: number;
+}
+
+export interface WeixinTypingTicketState {
+  ticket: string;
+  savedAt: string;
 }
 
 export interface AgentEvent {
@@ -166,4 +202,58 @@ export interface ParserState {
 export interface TelegramCommand {
   command: string;
   description: string;
+}
+
+export interface WeixinQrcodeResponse {
+  qrcode: string;
+  qrcodeImgContent: string;
+}
+
+export interface WeixinQrcodeStatusResponse {
+  status: 'wait' | 'scaned' | 'confirmed' | 'expired';
+  botToken?: string;
+  accountId?: string;
+  userId?: string;
+  baseUrl?: string;
+}
+
+export interface WeixinTextMessageParams {
+  toUserId: string;
+  contextToken: string;
+  text: string;
+}
+
+export interface WeixinTypingParams {
+  ilinkUserId: string;
+  typingTicket: string;
+  status: number;
+}
+
+export interface WeixinMessageItem {
+  type?: number;
+  text_item?: {
+    text?: string;
+  };
+}
+
+export interface WeixinMessage {
+  seq?: number;
+  message_id?: number;
+  from_user_id?: string;
+  to_user_id?: string;
+  session_id?: string;
+  group_id?: string;
+  message_type?: number;
+  message_state?: number;
+  context_token?: string;
+  item_list?: WeixinMessageItem[];
+}
+
+export interface WeixinGetUpdatesResponse {
+  ret: number;
+  errcode?: number;
+  errmsg?: string;
+  msgs?: WeixinMessage[];
+  get_updates_buf?: string;
+  longpolling_timeout_ms?: number;
 }

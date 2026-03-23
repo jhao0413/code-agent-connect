@@ -2,7 +2,7 @@
 
 [中文](README.zh-CN.md)
 
-Minimal Telegram bridge for local `claude`, `codex`, `neovate`, and `opencode` CLIs.
+Minimal Telegram and Weixin iLink bridge for local `claude`, `codex`, `neovate`, and `opencode` CLIs.
 
 ## Quick Start
 
@@ -13,13 +13,16 @@ npm install -g code-agent-connect
 # 2. Interactive setup (creates ~/.code-agent-contect/config.toml)
 code-agent-connect setup
 
-# 3. Verify setup
+# 3. Optional: log in to Weixin iLink Bot
+code-agent-connect weixin login
+
+# 4. Verify setup
 code-agent-connect doctor
 
-# 4. Run (foreground)
+# 5. Run (foreground)
 code-agent-connect serve
 
-# 5. Or install as background service — macOS / Linux only
+# 6. Or install as background service — macOS / Linux only
 code-agent-connect service install
 
 # Linux only: enable startup after reboot
@@ -49,7 +52,7 @@ Image input (sending a photo in Telegram) is currently only supported by `codex`
 
 ## Scope
 
-- Telegram private chat only
+- Telegram private chat and Weixin iLink single chat
 - One active logical session per Telegram user
 - Four local agents: `claude`, `codex`, `neovate`, `opencode`
 - Foreground `serve` runtime on macOS, Linux, and Windows
@@ -60,7 +63,8 @@ Image input (sending a photo in Telegram) is currently only supported by `codex`
 
 - macOS, Linux, or Windows 10/11
 - Node.js 20+
-- Telegram bot token
+- Telegram bot token if Telegram is enabled
+- Weixin iLink account authorization if Weixin is enabled
 - Installed local CLIs:
   - `claude`
   - `codex`
@@ -73,8 +77,11 @@ Image input (sending a photo in Telegram) is currently only supported by `codex`
 
 Run `code-agent-connect setup` for an interactive wizard, or manually create `~/.code-agent-contect/config.toml` and fill in:
 
-- `telegram.bot_token`
-- `telegram.allowed_user_ids`
+- `platforms.telegram.enabled`
+- `platforms.telegram.bot_token`
+- `platforms.telegram.allowed_user_ids`
+- `platforms.weixin.enabled`
+- Optional `platforms.weixin.channel_version`
 - `bridge.working_dir`
 - Optional `network.proxy_url` if Telegram or the agent CLIs must go through a proxy
 - Optional `bin` / `model` overrides under `[agents.*]`
@@ -92,8 +99,9 @@ proxy_url = "http://127.0.0.1:7890"
 
 ```bash
 code-agent-connect setup               # Interactive config setup wizard
+code-agent-connect weixin login        # Log in to Weixin iLink Bot; prints the QR code in your terminal
 code-agent-connect serve               # Start the bridge (foreground)
-code-agent-connect doctor              # Check config, binaries, Telegram token, and service status
+code-agent-connect doctor              # Check config, binaries, platform credentials, and service status
 code-agent-connect service install     # Install as background service (systemd/launchd — macOS/Linux only)
 code-agent-connect service uninstall   # Remove the background service
 code-agent-connect check-update        # Check if a newer version is available on npm
@@ -111,6 +119,19 @@ code-agent-connect check-update        # Check if a newer version is available o
 Any other private text message is sent to the active agent.
 
 Each Telegram logical session keeps its own working directory. `/set_working_dir` updates that directory for the current session and resets the active agent session when the directory changes, so subsequent turns run from the new location. The command accepts absolute paths, `~/...`, and relative paths; relative paths are resolved from the current session working directory.
+
+## Weixin iLink commands
+
+Weixin text messages support the same slash commands as Telegram:
+
+- `/start`
+- `/help`
+- `/new`
+- `/set_working_dir /path/to/project`
+- `/use claude|codex|neovate|opencode`
+- `/status`
+
+Current Weixin support is text-only. Media upload/download is not implemented yet.
 
 ## Keeping It Running
 

@@ -8,7 +8,13 @@ import {
   isStringArray,
   which,
 } from './utils.js';
-import type { AgentConfig, Config, NetworkConfig } from './types.js';
+import type {
+  AgentConfig,
+  Config,
+  NetworkConfig,
+  TelegramPlatformConfig,
+  WeixinPlatformConfig,
+} from './types.js';
 
 export const VALID_AGENTS = ['claude', 'codex', 'neovate', 'opencode'];
 
@@ -78,24 +84,68 @@ function normalizeNetworkConfig(raw: unknown): NetworkConfig {
   };
 }
 
+function normalizeTelegramConfig(raw: unknown, legacyRaw: unknown): TelegramPlatformConfig {
+  const value = ((typeof raw === 'object' && raw && !Array.isArray(raw)) ? raw : legacyRaw || {}) as Record<string, unknown>;
+  const enabled = value.enabled !== false;
+  const botToken = typeof value.bot_token === 'string' ? value.bot_token.trim() : '';
+  const rawAllowedUserIds = value.allowed_user_ids;
+
+  if (!enabled) {
+    return {
+      enabled: false,
+      botToken,
+      allowedUserIds: Array.isArray(rawAllowedUserIds)
+        ? coerceStringArray(rawAllowedUserIds, 'platforms.telegram.allowed_user_ids')
+        : [],
+    };
+  }
+
+  if (!botToken) {
+    throw new Error('platforms.telegram.bot_token is required when Telegram is enabled');
+  }
+  if (!Array.isArray(rawAllowedUserIds) || rawAllowedUserIds.length === 0) {
+    throw new Error('platforms.telegram.allowed_user_ids must be a non-empty array when Telegram is enabled');
+  }
+
+  return {
+    enabled: true,
+    botToken,
+    allowedUserIds: coerceStringArray(rawAllowedUserIds, 'platforms.telegram.allowed_user_ids'),
+  };
+}
+
+function normalizeWeixinConfig(raw: unknown): WeixinPlatformConfig {
+  const value = ((typeof raw === 'object' && raw && !Array.isArray(raw)) ? raw : {}) as Record<string, unknown>;
+  const enabled = value.enabled === true;
+  const channelVersion = typeof value.channel_version === 'string' && value.channel_version.trim()
+    ? value.channel_version.trim()
+    : '1.0.0';
+  const baseUrl = typeof value.base_url === 'string' && value.base_url.trim()
+    ? value.base_url.trim()
+    : undefined;
+  const skRouteTag = typeof value.sk_route_tag === 'string' && value.sk_route_tag.trim()
+    ? value.sk_route_tag.trim()
+    : undefined;
+
+  return {
+    enabled,
+    channelVersion,
+    baseUrl,
+    skRouteTag,
+  };
+}
+
 export async function loadConfig(configPath = defaultConfigPath()): Promise<Config> {
   const raw = await fs.readFile(configPath, 'utf8');
   const parsed = parseToml(raw);
 
-  const telegram = (parsed.telegram || {}) as Record<string, unknown>;
+  const platforms = (parsed.platforms || {}) as Record<string, unknown>;
+  const legacyTelegram = (parsed.telegram || {}) as Record<string, unknown>;
   const bridge = (parsed.bridge || {}) as Record<string, unknown>;
   const agents = (parsed.agents || {}) as Record<string, unknown>;
   const network = parsed.network || {};
-
-  if (!telegram.bot_token || typeof telegram.bot_token !== 'string') {
-    throw new Error('telegram.bot_token is required');
-  }
-
-  if (!Array.isArray(telegram.allowed_user_ids) || telegram.allowed_user_ids.length === 0) {
-    throw new Error('telegram.allowed_user_ids must be a non-empty array');
-  }
-
-  const allowedUserIds = coerceStringArray(telegram.allowed_user_ids, 'telegram.allowed_user_ids');
+  const telegram = normalizeTelegramConfig(platforms.telegram, legacyTelegram);
+  const weixin = normalizeWeixinConfig(platforms.weixin);
   const defaultAgent = (bridge.default_agent as string) || 'claude';
   if (!VALID_AGENTS.includes(defaultAgent)) {
     throw new Error(`bridge.default_agent must be one of: ${VALID_AGENTS.join(', ')}`);
@@ -142,9 +192,11 @@ export async function loadConfig(configPath = defaultConfigPath()): Promise<Conf
     stateDir: defaultStateDir(),
     systemdUserDir: defaultSystemdUserDir(),
     ...(os.platform() === 'darwin' ? { launchAgentDir: defaultLaunchAgentDir() } : {}),
-    telegram: {
-      botToken: telegram.bot_token,
-      allowedUserIds,
+    telegram,
+    weixin,
+    platforms: {
+      telegram,
+      weixin,
     },
     bridge: {
       defaultAgent,
@@ -188,6 +240,7 @@ export function applyRuntimeEnvironment(config: Config): void {
     process.env.http_proxy = config.network.proxyUrl;
     process.env.https_proxy = config.network.proxyUrl;
     process.env.all_proxy = config.network.proxyUrl;
+    process.env.NODE_USE_ENV_PROXY = '1';
   }
 
   if (config.network?.noProxy) {

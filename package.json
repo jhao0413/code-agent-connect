@@ -11,7 +11,7 @@
   },
   "scripts": {
     "build": "tsc",
-    "test": "node --import tsx --test test/**/*.test.ts"
+    "test": "node scripts/run-tests.mjs"
   },
   "engines": {
     "node": ">=20"
@@ -20,5 +20,8 @@
     "@types/node": "^25.4.0",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3"
+  },
+  "dependencies": {
+    "qrcode-terminal": "^0.12.0"
   }
 }

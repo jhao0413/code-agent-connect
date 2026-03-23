@@ -7,8 +7,13 @@ export function tomlStringArray(arr: string[]): string {
 }
 
 export interface ConfigData {
-  botToken: string;
-  allowedUserIds: string[];
+  telegramEnabled: boolean;
+  botToken?: string;
+  allowedUserIds?: string[];
+  weixinEnabled: boolean;
+  weixinChannelVersion?: string;
+  weixinBaseUrl?: string;
+  weixinSkRouteTag?: string;
   defaultAgent: string;
   workingDir: string;
   enabledAgents: string[];
@@ -18,14 +23,29 @@ export interface ConfigData {
 
 export function generateConfigToml(data: ConfigData): string {
   const lines: string[] = [
-    '[telegram]',
-    `bot_token = ${tomlString(data.botToken)}`,
-    `allowed_user_ids = ${tomlStringArray(data.allowedUserIds)}`,
+    '[platforms.telegram]',
+    `enabled = ${data.telegramEnabled ? 'true' : 'false'}`,
+    `bot_token = ${tomlString(data.botToken || '')}`,
+    `allowed_user_ids = ${tomlStringArray(data.allowedUserIds || [])}`,
+    '',
+    '[platforms.weixin]',
+    `enabled = ${data.weixinEnabled ? 'true' : 'false'}`,
+    `channel_version = ${tomlString(data.weixinChannelVersion || '1.0.0')}`,
+  ];
+
+  if (data.weixinBaseUrl) {
+    lines.push(`base_url = ${tomlString(data.weixinBaseUrl)}`);
+  }
+  if (data.weixinSkRouteTag) {
+    lines.push(`sk_route_tag = ${tomlString(data.weixinSkRouteTag)}`);
+  }
+
+  lines.push(
     '',
     '[bridge]',
     `default_agent = ${tomlString(data.defaultAgent)}`,
     `working_dir = ${tomlString(data.workingDir)}`,
-  ];
+  );
 
   if (data.proxyUrl) {
     lines.push('', '[network]', `proxy_url = ${tomlString(data.proxyUrl)}`);

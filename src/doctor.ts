@@ -1,6 +1,7 @@
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import { TelegramClient } from './telegram-client.js';
+import { StateStore } from './storage.js';
 import {
   fileExists,
   formatCheckResult,
@@ -39,23 +40,63 @@ export async function runDoctor(config: Config): Promise<CheckResult> {
     config.stateDir,
   );
 
+  let store: StateStore | null = null;
+  try {
+    store = new StateStore(config.stateDir);
+    await store.init();
+  } catch (error) {
+    push(false, 'State store can be loaded', error instanceof Error ? error.message : String(error));
+  }
+
+  if (store) {
+    for (const { ownerId, session } of store.listActiveSessions()) {
+      if (!session.workingDir) {
+        continue;
+      }
+      try {
+        const stats = await fs.stat(session.workingDir);
+        push(stats.isDirectory(), 'Active session working directory exists', `${ownerId} -> ${session.workingDir}`);
+      } catch {
+        push(false, 'Active session working directory exists', `${ownerId} -> ${session.workingDir}`);
+      }
+    }
+  }
+
   for (const agent of config.agents.enabled) {
     const binaryPath = resolveAgentBinary(config, agent);
     push(!!binaryPath && isExecutable(binaryPath), `${agent} binary is executable`, binaryPath || 'not found');
   }
 
-  try {
-    const telegram = new TelegramClient(config.telegram.botToken, {
-      proxyUrl: config.network?.proxyUrl,
-    });
-    const me = await telegram.getMe() as { username?: string; first_name?: string };
-    push(
-      true,
-      'Telegram token is valid',
-      `@${me.username || me.first_name || 'bot'}${config.network?.proxyUrl ? ' (proxy)' : ''}`,
-    );
-  } catch (error) {
-    push(false, 'Telegram token is valid', error instanceof Error ? error.message : String(error));
+  if (config.telegram.enabled) {
+    try {
+      const telegram = new TelegramClient(config.telegram.botToken, {
+        proxyUrl: config.network?.proxyUrl,
+      });
+      const me = await telegram.getMe() as { username?: string; first_name?: string };
+      push(
+        true,
+        'Telegram token is valid',
+        `@${me.username || me.first_name || 'bot'}${config.network?.proxyUrl ? ' (proxy)' : ''}`,
+      );
+    } catch (error) {
+      push(false, 'Telegram token is valid', error instanceof Error ? error.message : String(error));
+    }
+  } else {
+    lines.push('[INFO] Telegram is disabled.');
+  }
+
+  if (config.weixin.enabled) {
+    const credential = store?.getActiveWeixinCredential() || null;
+    push(!!credential, 'Weixin credential is available', credential?.accountId || 'run: code-agent-connect weixin login');
+    if (credential) {
+      push(
+        true,
+        'Weixin base URL is configured',
+        credential.baseUrl,
+      );
+    }
+  } else {
+    lines.push('[INFO] Weixin is disabled.');
   }
 
   if (os.platform() === 'darwin') {

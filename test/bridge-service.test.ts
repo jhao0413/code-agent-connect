@@ -175,3 +175,71 @@ test('BridgeService restarts only the mismatched agent session after a cwd chang
     text: 'done',
   }]);
 });
+
+test('BridgeService reports thrown provider errors instead of rejecting the prompt', async () => {
+  const stateDir = await fs.mkdtemp(path.join(os.tmpdir(), 'cac-bridge-'));
+  const store = new StateStore(stateDir);
+  await store.init();
+  const session = await store.createSession('42', 'claude', '/tmp/work');
+
+  const sentMessages = [];
+  const service = new BridgeService({
+    telegram: {
+      botToken: 'token',
+      allowedUserIds: ['42'],
+      enabled: true,
+    },
+    weixin: {
+      enabled: false,
+      channelVersion: '1.0.0',
+      baseUrl: undefined,
+      skRouteTag: undefined,
+    },
+    platforms: {
+      telegram: {
+        botToken: 'token',
+        allowedUserIds: ['42'],
+        enabled: true,
+      },
+      weixin: {
+        enabled: false,
+        channelVersion: '1.0.0',
+        baseUrl: undefined,
+        skRouteTag: undefined,
+      },
+    },
+    bridge: {
+      defaultAgent: 'claude',
+      workingDir: '/tmp/work',
+      replyChunkChars: 500,
+      replyFlushMs: 1500,
+      pollTimeoutSeconds: 30,
+      maxInputImageMb: 20,
+      allowImageDocuments: true,
+    },
+    network: {},
+    agents: {
+      enabled: ['claude'],
+      claude: { bin: undefined, model: undefined, extraArgs: [] },
+      codex: { bin: undefined, model: undefined, extraArgs: [] },
+      neovate: { bin: undefined, model: undefined, extraArgs: [] },
+      opencode: { bin: undefined, model: undefined, extraArgs: [] },
+    },
+  }, store, {
+    streamAgentTurnImpl: async function* () {
+      throw new Error('provider boom');
+    },
+  });
+
+  service.telegram = {
+    async sendChatAction() {},
+    async sendMessage(chatId, text) {
+      sentMessages.push({ chatId, text });
+    },
+  };
+
+  await assert.doesNotReject(() => service.handlePrompt(123, session, 'hi'));
+  assert.equal(sentMessages.length, 1);
+  assert.equal(sentMessages[0].chatId, 123);
+  assert.match(sentMessages[0].text, /provider boom/);
+});

@@ -2,7 +2,7 @@
 
 [English](README.md)
 
-轻量级 Telegram 桥接服务，连接本地 `claude`、`codex`、`neovate` 和 `opencode` CLI。
+轻量级 Telegram / 微信 iLink 桥接服务，连接本地 `claude`、`codex`、`neovate` 和 `opencode` CLI。
 
 ## 快速开始
 
@@ -13,13 +13,16 @@ npm install -g code-agent-connect
 # 2. 交互式配置（生成 ~/.code-agent-contect/config.toml）
 code-agent-connect setup
 
-# 3. 检查环境
+# 3. 可选：登录微信 iLink Bot
+code-agent-connect weixin login
+
+# 4. 检查环境
 code-agent-connect doctor
 
-# 4. 前台运行
+# 5. 前台运行
 code-agent-connect serve
 
-# 5. 或安装为后台服务（仅 macOS / Linux）
+# 6. 或安装为后台服务（仅 macOS / Linux）
 code-agent-connect service install
 
 # 仅 Linux：启用重启后自动运行
@@ -49,8 +52,8 @@ sudo loginctl enable-linger "$USER"
 
 ## 功能范围
 
-- 仅支持 Telegram 私聊
-- 每个 Telegram 用户一个活跃会话
+- 支持 Telegram 私聊和微信 iLink 单聊
+- 每个平台用户一个活跃会话
 - 四个本地 agent：`claude`、`codex`、`neovate`、`opencode`
 - macOS、Linux、Windows 上均支持前台 `serve` 模式
 - Linux 上通过 `systemd --user`、macOS 上通过 `launchd` 实现自动重启和开机自启
@@ -60,7 +63,8 @@ sudo loginctl enable-linger "$USER"
 
 - macOS、Linux 或 Windows 10/11
 - Node.js 20+
-- Telegram bot token
+- 启用 Telegram 时需要 Telegram bot token
+- 启用微信时需要先完成 iLink Bot 授权登录
 - 已安装的本地 CLI：
   - `claude`
   - `codex`
@@ -73,8 +77,11 @@ sudo loginctl enable-linger "$USER"
 
 运行 `code-agent-connect setup` 进行交互式配置，或手动创建 `~/.code-agent-contect/config.toml` 并填写：
 
-- `telegram.bot_token`
-- `telegram.allowed_user_ids`
+- `platforms.telegram.enabled`
+- `platforms.telegram.bot_token`
+- `platforms.telegram.allowed_user_ids`
+- `platforms.weixin.enabled`
+- 可选：`platforms.weixin.channel_version`
 - `bridge.working_dir`
 - 可选：`network.proxy_url`（Telegram 或 agent CLI 需要走代理时使用）
 - 可选：`[agents.*]` 下的 `bin` / `model` 覆盖配置
@@ -92,8 +99,9 @@ proxy_url = "http://127.0.0.1:7890"
 
 ```bash
 code-agent-connect setup               # 交互式配置向导
+code-agent-connect weixin login        # 通过二维码登录微信 iLink Bot，会直接在终端打印二维码
 code-agent-connect serve               # 启动桥接服务（前台运行）
-code-agent-connect doctor              # 检查配置、二进制文件、Telegram token 及服务状态
+code-agent-connect doctor              # 检查配置、二进制文件、平台凭证及服务状态
 code-agent-connect service install     # 安装为后台服务（systemd/launchd，仅 macOS/Linux）
 code-agent-connect service uninstall   # 卸载后台服务
 code-agent-connect check-update        # 检查 npm 上是否有新版本
@@ -111,6 +119,19 @@ code-agent-connect check-update        # 检查 npm 上是否有新版本
 其他私聊文本消息会被发送给当前活跃的 agent。
 
 每个 Telegram 会话维护独立的工作目录。`/set_working_dir` 更新当前会话的工作目录，目录变更时会重置活跃的 agent 会话，后续交互将在新目录下执行。支持绝对路径、`~/...` 和相对路径；相对路径基于当前会话工作目录解析。
+
+## 微信 iLink 命令
+
+微信文本消息支持与 Telegram 相同的斜杠命令：
+
+- `/start`
+- `/help`
+- `/new`
+- `/set_working_dir /path/to/project`
+- `/use claude|codex|neovate|opencode`
+- `/status`
+
+当前微信侧仅支持文本消息，媒体收发暂未实现。
 
 ## 保持运行
 

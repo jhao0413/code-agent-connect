@@ -615,34 +615,38 @@ export class BridgeService {
 
     try {
       await sendTyping();
-      for await (const event of this.streamAgentTurnImpl({
-        config: this.config,
-        agent,
-        prompt,
-        attachments,
-        workingDir: prepared.workingDir,
-        upstreamSessionId: prepared.upstreamSessionId,
-      })) {
-        if (event.type === 'session_started' && event.sessionId) {
-          session.providerSessionIds[agent] = event.sessionId;
-          session.providerWorkingDirs[agent] = prepared.workingDir;
-          await this.store.saveSession(session);
-        }
+      try {
+        for await (const event of this.streamAgentTurnImpl({
+          config: this.config,
+          agent,
+          prompt,
+          attachments,
+          workingDir: prepared.workingDir,
+          upstreamSessionId: prepared.upstreamSessionId,
+        })) {
+          if (event.type === 'session_started' && event.sessionId) {
+            session.providerSessionIds[agent] = event.sessionId;
+            session.providerWorkingDirs[agent] = prepared.workingDir;
+            await this.store.saveSession(session);
+          }
 
-        if (event.type === 'partial_text' && event.text) {
-          aggregateText += event.text;
-          if (aggregateText.length - sentLength >= this.config.bridge.replyChunkChars) {
-            await queueFlush({ force: true });
+          if (event.type === 'partial_text' && event.text) {
+            aggregateText += event.text;
+            if (aggregateText.length - sentLength >= this.config.bridge.replyChunkChars) {
+              await queueFlush({ force: true });
+            }
+          }
+
+          if (event.type === 'final_text' && event.text) {
+            finalText = event.text;
+          }
+
+          if (event.type === 'error' && event.message) {
+            errors.push(event.message);
           }
         }
-
-        if (event.type === 'final_text' && event.text) {
-          finalText = event.text;
-        }
-
-        if (event.type === 'error' && event.message) {
-          errors.push(event.message);
-        }
+      } catch (error) {
+        errors.push(toErrorMessage(error));
       }
     } finally {
       typingActive = false;

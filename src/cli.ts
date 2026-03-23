@@ -8,6 +8,10 @@ import { runDoctor } from './doctor.js';
 import { getLingerStatus, getProjectRoot, installService, isServiceRunning, LAUNCHD_LABEL, restartService, uninstallService } from './service-manager.js';
 import { checkForUpdate, formatUpdateNotice, performUpdate } from './updater.js';
 import { runSetup } from './setup.js';
+import { WeixinBridgeService } from './weixin-service.js';
+import { WeixinClient } from './weixin-client.js';
+import { runWeixinLogin } from './weixin-login.js';
+import { runPersistentService } from './service-runner.js';
 import type { Config } from './types.js';
 
 function printHelp(): void {
@@ -20,6 +24,7 @@ function printHelp(): void {
       '  code-agent-connect doctor [--config /path/to/config.toml]',
       '  code-agent-connect service install [--config /path/to/config.toml]',
       '  code-agent-connect service uninstall [--config /path/to/config.toml]',
+      '  code-agent-connect weixin login [--config /path/to/config.toml]',
       '  code-agent-connect update [--config /path/to/config.toml]',
       '  code-agent-connect check-update',
       '  code-agent-connect setup',
@@ -83,8 +88,24 @@ async function main(): Promise<void> {
     });
 
     const store = new StateStore(config.stateDir);
-    const bridge = new BridgeService(config, store);
-    await bridge.run();
+    await store.init();
+
+    const tasks: Promise<void>[] = [];
+    if (config.telegram.enabled) {
+      tasks.push(runPersistentService('telegram', async () => {
+        await new BridgeService(config, store).run();
+      }));
+    }
+    if (config.weixin.enabled) {
+      tasks.push(runPersistentService('weixin', async () => {
+        await new WeixinBridgeService(config, store).run();
+      }));
+    }
+    if (tasks.length === 0) {
+      throw new Error('No chat platform is enabled in the config.');
+    }
+
+    await Promise.all(tasks);
     return;
   }
 
@@ -161,6 +182,22 @@ async function main(): Promise<void> {
 
   if (command === 'setup') {
     await runSetup();
+    return;
+  }
+
+  if (command === 'weixin' && subcommand === 'login') {
+    const config = await loadConfig(configPath);
+    applyRuntimeEnvironment(config);
+    const store = new StateStore(config.stateDir);
+    await store.init();
+    const client = new WeixinClient({
+      baseUrl: config.weixin.baseUrl,
+      channelVersion: config.weixin.channelVersion,
+      skRouteTag: config.weixin.skRouteTag,
+      fetchImpl: globalThis.fetch,
+      proxyUrl: config.network?.proxyUrl,
+    });
+    await runWeixinLogin({ store, client });
     return;
   }
 

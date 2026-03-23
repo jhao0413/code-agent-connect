@@ -1,6 +1,13 @@
-[telegram]
+[platforms.telegram]
+enabled = true
 bot_token = "123456:replace-me"
 allowed_user_ids = ["123456789"]
+
+[platforms.weixin]
+enabled = false
+channel_version = "1.0.0"
+base_url = "https://ilinkai.weixin.qq.com"
+sk_route_tag = ""
 
 [bridge]
 default_agent = "claude"

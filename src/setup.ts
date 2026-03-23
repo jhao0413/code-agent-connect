@@ -87,20 +87,31 @@ export async function runSetup(): Promise<void> {
     }
     console.log(`Default agent: ${defaultAgent}`);
 
-    // Step 3: Telegram config
+    // Step 3: platform config
     console.log('');
-    const botToken = await prompt.ask('Telegram bot_token');
-    if (!botToken) {
-      console.log('bot_token is required. Aborted.');
-      return;
+    const telegramEnabled = await prompt.confirm('Enable Telegram?', true);
+    let botToken = '';
+    let allowedUserIds: string[] = [];
+    if (telegramEnabled) {
+      botToken = await prompt.ask('Telegram bot_token');
+      if (!botToken) {
+        console.log('bot_token is required when Telegram is enabled. Aborted.');
+        return;
+      }
+
+      const userIdsRaw = await prompt.ask('Telegram allowed_user_ids (comma-separated)');
+      if (!userIdsRaw) {
+        console.log('allowed_user_ids is required when Telegram is enabled. Aborted.');
+        return;
+      }
+      allowedUserIds = userIdsRaw.split(',').map((s) => s.trim()).filter(Boolean);
     }
 
-    const userIdsRaw = await prompt.ask('Telegram allowed_user_ids (comma-separated)');
-    if (!userIdsRaw) {
-      console.log('allowed_user_ids is required. Aborted.');
+    const weixinEnabled = await prompt.confirm('Enable Weixin iLink Bot?', false);
+    if (!telegramEnabled && !weixinEnabled) {
+      console.log('At least one platform must be enabled. Aborted.');
       return;
     }
-    const allowedUserIds = userIdsRaw.split(',').map((s) => s.trim()).filter(Boolean);
 
     // Step 4: working directory
     const workingDir = await prompt.ask('Working directory', process.cwd());
@@ -119,8 +130,11 @@ export async function runSetup(): Promise<void> {
 
     // Step 6: summary and write
     const data: ConfigData = {
-      botToken,
+      telegramEnabled,
+      botToken: botToken || undefined,
       allowedUserIds,
+      weixinEnabled,
+      weixinChannelVersion: '1.0.0',
       defaultAgent,
       workingDir,
       enabledAgents,
@@ -140,6 +154,9 @@ export async function runSetup(): Promise<void> {
 
     await writeFileAtomic(configPath, toml);
     console.log(`Config written to ${configPath}`);
+    if (weixinEnabled) {
+      console.log('Run `code-agent-connect weixin login` to authorize the Weixin account.');
+    }
     console.log('Run `code-agent-connect doctor` to verify.');
   } finally {
     prompt.close();

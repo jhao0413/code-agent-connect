@@ -1,5 +1,7 @@
 import { spawn } from 'node:child_process';
+import type { ChildProcessByStdio } from 'node:child_process';
 import { createInterface } from 'node:readline';
+import type { Readable } from 'node:stream';
 import { resolveAgentBinary } from './config.js';
 import { normalizeSpawn, toErrorMessage } from './utils.js';
 import type { AgentConfig, AgentEvent, Attachment, CommandSpec, Config, ParserState, StreamAgentTurnParams } from './types.js';
@@ -263,20 +265,29 @@ export async function* streamAgentTurn({ config, agent, prompt, attachments = []
   const parserState: ParserState = {};
 
   const [spawnCmd, spawnArgs] = normalizeSpawn(spec.command, spec.args);
-  const child = spawn(spawnCmd, spawnArgs, {
-    cwd: spec.cwd,
-    env: process.env,
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
+  let child: ChildProcessByStdio<null, Readable, Readable>;
+  try {
+    child = spawn(spawnCmd, spawnArgs, {
+      cwd: spec.cwd,
+      env: process.env,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+  } catch (error) {
+    yield {
+      type: 'error',
+      message: `${agent} execution failed: ${toErrorMessage(error)}`,
+    };
+    return;
+  }
 
   let stderr = '';
   child.stderr.on('data', (chunk: Buffer) => {
     stderr += chunk.toString();
   });
 
-  const closePromise = new Promise<number>((resolve, reject) => {
-    child.once('error', reject);
-    child.once('close', (code: number | null) => resolve(code ?? 0));
+  const closePromise = new Promise<{ code: number; error: unknown | null }>((resolve) => {
+    child.once('error', (error) => resolve({ code: 127, error }));
+    child.once('close', (code: number | null) => resolve({ code: code ?? 0, error: null }));
   });
 
   const lines = createInterface({
@@ -304,7 +315,16 @@ export async function* streamAgentTurn({ config, agent, prompt, attachments = []
       }
     }
 
-    const exitCode = await closePromise;
+    const closeResult = await closePromise;
+    if (closeResult.error) {
+      yield {
+        type: 'error',
+        message: `${agent} execution failed: ${toErrorMessage(closeResult.error)}`,
+      };
+      return;
+    }
+
+    const exitCode = closeResult.code;
     if (!parserState.emittedFinal && parserState.finalText) {
       yield { type: 'final_text', text: parserState.finalText };
     } else if (!parserState.emittedFinal && parserState.assistantText) {
